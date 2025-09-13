@@ -34,6 +34,13 @@ const formatTimeHHMM = (d: Date) => {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
 
+  // Edit mode state
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editData, setEditData] = useState<ReminderFormData>({ title: '', description: '', date: '', time: '' });
+  const [editScheduledAt, setEditScheduledAt] = useState<Date | null>(null);
+  const [showEditDatePicker, setShowEditDatePicker] = useState(false);
+  const [showEditTimePicker, setShowEditTimePicker] = useState(false);
+
   useEffect(() => {
     // Load existing reminders from storage (placeholder for now)
     loadReminders();
@@ -145,17 +152,33 @@ const formatTimeHHMM = (d: Date) => {
   };
 
   const handleDeleteReminder = async (reminder: Reminder) => {
-    try {
-      if (reminder.notificationId) {
-        await NotificationService.cancelNotification(reminder.notificationId);
-      }
-      
-      setReminders(prev => prev.filter(r => r.id !== reminder.id));
-      Alert.alert('Success', 'Reminder deleted');
-    } catch (error) {
-      console.error('Error deleting reminder:', error);
-      Alert.alert('Error', 'Failed to delete reminder');
-    }
+    Alert.alert(
+      'Delete reminder?',
+      'This action cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              if (reminder.notificationId) {
+                await NotificationService.cancelNotification(reminder.notificationId);
+              }
+              setReminders(prev => prev.filter(r => r.id !== reminder.id));
+              if (editingId === reminder.id) {
+                setEditingId(null);
+                setEditScheduledAt(null);
+              }
+              Alert.alert('Deleted', 'Reminder deleted');
+            } catch (error) {
+              console.error('Error deleting reminder:', error);
+              Alert.alert('Error', 'Failed to delete reminder');
+            }
+          },
+        },
+      ]
+    );
   };
 
   const formatDateTime = (date: Date) => {
@@ -190,6 +213,89 @@ const formatTimeHHMM = (d: Date) => {
 
   const formattedDate = formatDateDDMMYYYY(scheduledAt);
   const formattedTime = formatTimeHHMM(scheduledAt);
+
+  // Edit helpers
+  const startEdit = (reminder: Reminder) => {
+    setEditingId(reminder.id);
+    const when = new Date(reminder.scheduledTime);
+    when.setSeconds(0, 0);
+    setEditScheduledAt(when);
+    setEditData({
+      title: reminder.title,
+      description: reminder.description ?? '',
+      date: formatDateDDMMYYYY(when),
+      time: formatTimeHHMM(when),
+    });
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditScheduledAt(null);
+    setShowEditDatePicker(false);
+    setShowEditTimePicker(false);
+  };
+
+  const onChangeEditDate = (_: any, date?: Date) => {
+    if (Platform.OS !== 'ios') setShowEditDatePicker(false);
+    if (!date || !editScheduledAt) return;
+    const updated = new Date(editScheduledAt);
+    updated.setFullYear(date.getFullYear(), date.getMonth(), date.getDate());
+    updated.setSeconds(0, 0);
+    setEditScheduledAt(updated);
+    setEditData(prev => ({ ...prev, date: formatDateDDMMYYYY(updated) }));
+  };
+
+  const onChangeEditTime = (_: any, date?: Date) => {
+    if (Platform.OS !== 'ios') setShowEditTimePicker(false);
+    if (!date || !editScheduledAt) return;
+    const updated = new Date(editScheduledAt);
+    updated.setHours(date.getHours(), date.getMinutes(), 0, 0);
+    setEditScheduledAt(updated);
+    setEditData(prev => ({ ...prev, time: formatTimeHHMM(updated) }));
+  };
+
+  const saveEdit = async (reminder: Reminder) => {
+    if (!editingId || !editScheduledAt) return;
+    if (!editData.title.trim()) {
+      Alert.alert('Error', 'Please enter a reminder title');
+      return;
+    }
+    if (editScheduledAt <= new Date()) {
+      Alert.alert('Error', 'Please select a future date and time');
+      return;
+    }
+
+    try {
+      // Cancel old schedule if any
+      if (reminder.notificationId) {
+        await NotificationService.cancelNotification(reminder.notificationId);
+      }
+
+      const updatedReminder: Reminder = {
+        ...reminder,
+        title: editData.title,
+        description: editData.description,
+        scheduledTime: editScheduledAt,
+        updatedAt: new Date(),
+      };
+
+      let newNotificationId: string | null = null;
+      if (updatedReminder.isActive) {
+        newNotificationId = await NotificationService.scheduleReminderNotification(updatedReminder);
+        if (!newNotificationId) {
+          Alert.alert('Error', 'Please enable notifications to update reminders!');
+          return;
+        }
+      }
+
+      setReminders(prev => prev.map(r => r.id === reminder.id ? { ...updatedReminder, notificationId: newNotificationId ?? r.notificationId } : r));
+      cancelEdit();
+      Alert.alert('Saved', 'Reminder updated successfully');
+    } catch (e) {
+      console.error('Error saving reminder', e);
+      Alert.alert('Error', 'Failed to update reminder');
+    }
+  };
 
   // Grouped & sorted (by time descending)
   const activeReminders = reminders
@@ -304,15 +410,26 @@ const formatTimeHHMM = (d: Date) => {
                       </View>
 
                       <View className="items-end gap-2">
-                        <View className="flex-row items-center">
-                          <Text className="mr-2 text-xs text-slate-600">Active</Text>
-                          <Switch
-                            value={true}
-                            onValueChange={(val) => handleToggleReminder(reminder, val)}
-                            trackColor={{ false: '#e5e7eb', true: '#34d399' }}
-                            thumbColor={'#10b981'}
-                          />
-                        </View>
+                        {editingId === reminder.id ? (
+                          <View className="flex-row gap-2">
+                            <TouchableOpacity onPress={() => saveEdit(reminder)} className="bg-emerald-600 rounded-lg px-3 py-1">
+                              <Text className="text-white text-xs font-medium">Save</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity onPress={cancelEdit} className="bg-slate-400 rounded-lg px-3 py-1">
+                              <Text className="text-white text-xs font-medium">Cancel</Text>
+                            </TouchableOpacity>
+                          </View>
+                        ) : (
+                          <View className="flex-row items-center">
+                            <Text className="mr-2 text-xs text-slate-600">Active</Text>
+                            <Switch
+                              value={true}
+                              onValueChange={(val) => handleToggleReminder(reminder, val)}
+                              trackColor={{ false: '#e5e7eb', true: '#34d399' }}
+                              thumbColor={'#10b981'}
+                            />
+                          </View>
+                        )}
                         <TouchableOpacity
                           onPress={() => handleDeleteReminder(reminder)}
                           className="bg-rose-500 rounded-lg px-3 py-1"
@@ -321,6 +438,60 @@ const formatTimeHHMM = (d: Date) => {
                         </TouchableOpacity>
                       </View>
                     </View>
+                    {/* Edit UI (inline) */}
+                    {editingId === reminder.id ? (
+                      <View className="mt-3 gap-2">
+                        <TextInput
+                          placeholder="Title"
+                          value={editData.title}
+                          onChangeText={(t) => setEditData(prev => ({ ...prev, title: t }))}
+                          className="border border-slate-300 rounded-lg p-2"
+                        />
+                        <TextInput
+                          placeholder="Description (optional)"
+                          value={editData.description}
+                          onChangeText={(t) => setEditData(prev => ({ ...prev, description: t }))}
+                          className="border border-slate-300 rounded-lg p-2"
+                          multiline
+                          numberOfLines={2}
+                        />
+                        <View className="flex-row gap-3">
+                          <View className="flex-1">
+                            <Text className="text-xs font-medium mb-1 text-slate-600">Date</Text>
+                            <TouchableOpacity onPress={() => setShowEditDatePicker(true)} className="border border-slate-300 rounded-lg p-2 bg-white">
+                              <Text className="text-slate-800">{editScheduledAt ? formatDateDDMMYYYY(editScheduledAt) : ''}</Text>
+                            </TouchableOpacity>
+                          </View>
+                          <View className="flex-1">
+                            <Text className="text-xs font-medium mb-1 text-slate-600">Time</Text>
+                            <TouchableOpacity onPress={() => setShowEditTimePicker(true)} className="border border-slate-300 rounded-lg p-2 bg-white">
+                              <Text className="text-slate-800">{editScheduledAt ? formatTimeHHMM(editScheduledAt) : ''}</Text>
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                        {showEditDatePicker && editScheduledAt && (
+                          <DateTimePicker
+                            value={editScheduledAt}
+                            mode="date"
+                            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                            onChange={onChangeEditDate}
+                          />
+                        )}
+                        {showEditTimePicker && editScheduledAt && (
+                          <DateTimePicker
+                            value={editScheduledAt}
+                            mode="time"
+                            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                            onChange={onChangeEditTime}
+                            is24Hour={false}
+                          />
+                        )}
+                      </View>
+                    ) : (
+                      <TouchableOpacity onPress={() => startEdit(reminder)} className="mt-3 self-start bg-sky-600 rounded-lg px-3 py-1">
+                        <Text className="text-white text-xs font-medium">Edit</Text>
+                      </TouchableOpacity>
+                    )}
                   </View>
                 );
               })
@@ -332,7 +503,6 @@ const formatTimeHHMM = (d: Date) => {
               <Text className="text-slate-500">No inactive reminders</Text>
             ) : (
               inactiveReminders.map((reminder) => {
-                const isActive = false;
                 return (
                   <View
                     key={reminder.id}
@@ -345,8 +515,8 @@ const formatTimeHHMM = (d: Date) => {
                           <Text className="text-slate-600 mt-1">{reminder.description}</Text>
                         ) : null}
                         <View className="flex-row items-center mt-2">
-                          <View className={`px-2 py-1 rounded-full bg-slate-100`}>
-                            <Text className={`text-slate-600 text-xs`}>
+                          <View className="px-2 py-1 rounded-full bg-slate-100">
+                            <Text className="text-slate-600 text-xs">
                               {formatDateTime(reminder.scheduledTime)}
                             </Text>
                           </View>
@@ -354,15 +524,26 @@ const formatTimeHHMM = (d: Date) => {
                       </View>
 
                       <View className="items-end gap-2">
-                        <View className="flex-row items-center">
-                          <Text className="mr-2 text-xs text-slate-600">Inactive</Text>
-                          <Switch
-                            value={false}
-                            onValueChange={(val) => handleToggleReminder(reminder, val)}
-                            trackColor={{ false: '#e5e7eb', true: '#34d399' }}
-                            thumbColor={'#9ca3af'}
-                          />
-                        </View>
+                        {editingId === reminder.id ? (
+                          <View className="flex-row gap-2">
+                            <TouchableOpacity onPress={() => saveEdit(reminder)} className="bg-emerald-600 rounded-lg px-3 py-1">
+                              <Text className="text-white text-xs font-medium">Save</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity onPress={cancelEdit} className="bg-slate-400 rounded-lg px-3 py-1">
+                              <Text className="text-white text-xs font-medium">Cancel</Text>
+                            </TouchableOpacity>
+                          </View>
+                        ) : (
+                          <View className="flex-row items-center">
+                            <Text className="mr-2 text-xs text-slate-600">Inactive</Text>
+                            <Switch
+                              value={false}
+                              onValueChange={(val) => handleToggleReminder(reminder, val)}
+                              trackColor={{ false: '#e5e7eb', true: '#34d399' }}
+                              thumbColor={'#9ca3af'}
+                            />
+                          </View>
+                        )}
                         <TouchableOpacity
                           onPress={() => handleDeleteReminder(reminder)}
                           className="bg-rose-500 rounded-lg px-3 py-1"
@@ -371,6 +552,61 @@ const formatTimeHHMM = (d: Date) => {
                         </TouchableOpacity>
                       </View>
                     </View>
+
+                    {/* Edit UI (inline) */}
+                    {editingId === reminder.id ? (
+                      <View className="mt-3 gap-2">
+                        <TextInput
+                          placeholder="Title"
+                          value={editData.title}
+                          onChangeText={(t) => setEditData(prev => ({ ...prev, title: t }))}
+                          className="border border-slate-300 rounded-lg p-2"
+                        />
+                        <TextInput
+                          placeholder="Description (optional)"
+                          value={editData.description}
+                          onChangeText={(t) => setEditData(prev => ({ ...prev, description: t }))}
+                          className="border border-slate-300 rounded-lg p-2"
+                          multiline
+                          numberOfLines={2}
+                        />
+                        <View className="flex-row gap-3">
+                          <View className="flex-1">
+                            <Text className="text-xs font-medium mb-1 text-slate-600">Date</Text>
+                            <TouchableOpacity onPress={() => setShowEditDatePicker(true)} className="border border-slate-300 rounded-lg p-2 bg-white">
+                              <Text className="text-slate-800">{editScheduledAt ? formatDateDDMMYYYY(editScheduledAt) : ''}</Text>
+                            </TouchableOpacity>
+                          </View>
+                          <View className="flex-1">
+                            <Text className="text-xs font-medium mb-1 text-slate-600">Time</Text>
+                            <TouchableOpacity onPress={() => setShowEditTimePicker(true)} className="border border-slate-300 rounded-lg p-2 bg-white">
+                              <Text className="text-slate-800">{editScheduledAt ? formatTimeHHMM(editScheduledAt) : ''}</Text>
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                        {showEditDatePicker && editScheduledAt && (
+                          <DateTimePicker
+                            value={editScheduledAt}
+                            mode="date"
+                            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                            onChange={onChangeEditDate}
+                          />
+                        )}
+                        {showEditTimePicker && editScheduledAt && (
+                          <DateTimePicker
+                            value={editScheduledAt}
+                            mode="time"
+                            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                            onChange={onChangeEditTime}
+                            is24Hour={false}
+                          />
+                        )}
+                      </View>
+                    ) : (
+                      <TouchableOpacity onPress={() => startEdit(reminder)} className="mt-3 self-start bg-sky-600 rounded-lg px-3 py-1">
+                        <Text className="text-white text-xs font-medium">Edit</Text>
+                      </TouchableOpacity>
+                    )}
                   </View>
                 );
               })

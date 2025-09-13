@@ -1,3 +1,3 @@
-- Active and Inactive reminders
-- Off the reminder once user is notified
-- 
+- Edit functionalities
+- Confirm before delete
+- Show details of "Create New Reminder" as popup when "+ Add" button clicked and handle state management for that
