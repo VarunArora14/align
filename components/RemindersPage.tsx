@@ -14,6 +14,7 @@ export const RemindersPage = () => {
   });
   const [scheduledAt, setScheduledAt] = useState<Date>(() => {
     const now = new Date();
+    now.setSeconds(0,0)
     now.setMinutes(now.getMinutes()+1);
     return now;
   });
@@ -68,7 +69,8 @@ export const RemindersPage = () => {
         // Clear form
         setFormData({ title: '', description: '', date: '', time: '' });
         const now = new Date();
-        now.setMinutes(now.getMinutes() + 5);
+        now.setSeconds(0,0)
+        now.setMinutes(now.getMinutes() + 1);
         setScheduledAt(now);
 
         Alert.alert('Success', 'Reminder created successfully!');
