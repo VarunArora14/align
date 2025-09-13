@@ -6,7 +6,6 @@ import type { Reminder } from '../types/reminder';
 // Configure notification handling
 Notifications.setNotificationHandler({
     handleNotification: async () => ({
-        shouldShowAlert: true,
         shouldPlaySound: true,
         shouldSetBadge: false,
         shouldShowBanner: true,
