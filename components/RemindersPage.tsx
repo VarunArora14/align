@@ -474,10 +474,15 @@ const formatTimeHHMM = (d: Date) => {
     .sort((a, b) => new Date(b.scheduledTime).getTime() - new Date(a.scheduledTime).getTime());
 
   return (
-    <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
-        <View className="flex-1 bg-slate-50">
-          <ScrollView className="flex-1 p-4" keyboardShouldPersistTaps="handled">
+    <View className="flex-1 bg-slate-50">
+      <ScrollView 
+        className="flex-1 p-4" 
+        keyboardShouldPersistTaps="handled" 
+        contentContainerStyle={{ paddingBottom: 120 }}
+        nestedScrollEnabled={true}
+        keyboardDismissMode="on-drag"
+        automaticallyAdjustKeyboardInsets={true}
+      >
       {/* Header with title and Add button */}
       <View className="flex-row items-center justify-between mb-4">
         <Text className="text-2xl font-bold text-slate-800">All Reminders</Text>
@@ -497,6 +502,25 @@ const formatTimeHHMM = (d: Date) => {
           onChangeText={setSearchQuery}
           className="border border-slate-300 rounded-2xl px-4 py-3 bg-white text-slate-800"
         />
+      </View>
+
+    {/* Chat input area pinned to bottom */}
+      <View className="border-t border-slate-200 bg-white p-3 mb-7">
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+          <View className="flex-row items-center">
+            <TextInput
+              placeholder="What do you want to be reminded of?"
+              value={chatText}
+              onChangeText={setChatText}
+              className="flex-1 border border-slate-300 rounded-full px-4 py-3 mr-3 bg-slate-50 text-slate-800"
+              returnKeyType="send"
+              onSubmitEditing={handleSendChat}
+            />
+            <TouchableOpacity onPress={handleSendChat} className="bg-emerald-600 p-3 rounded-full">
+              <Text className="text-white font-bold">➤</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableWithoutFeedback>
       </View>
 
       {/* Create Reminder Modal */}
@@ -559,6 +583,7 @@ const formatTimeHHMM = (d: Date) => {
             </View>
           </View>
         </View>
+
       </Modal>
 
   {/* Reminders List */}
@@ -805,24 +830,7 @@ const formatTimeHHMM = (d: Date) => {
       </View>
       </ScrollView>
 
-      {/* Chat input area pinned to bottom */}
-      <View className="border-t border-slate-200 bg-white p-3 mb-7 ">
-        <View className="flex-row items-center">
-          <TextInput
-            placeholder="What do you want to be reminded of?"
-            value={chatText}
-            onChangeText={setChatText}
-            className="flex-1 border border-slate-300 rounded-full px-4 py-3 mr-3 bg-slate-50 text-slate-800"
-            returnKeyType="send"
-            onSubmitEditing={handleSendChat}
-          />
-          <TouchableOpacity onPress={handleSendChat} className="bg-emerald-600 p-3 rounded-full">
-            <Text className="text-white font-bold">➤</Text>
-          </TouchableOpacity>
-        </View>
-          </View>
-        </View>
-      </TouchableWithoutFeedback>
-    </KeyboardAvoidingView>
+
+    </View>
   );
 };
