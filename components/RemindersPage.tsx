@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ScrollView, Alert, Switch, Platform, AppState } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ScrollView, Alert, Switch, Platform, AppState, Modal } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as Notifications from 'expo-notifications';
 import { NotificationService } from '../services/notificationService';
@@ -18,6 +18,147 @@ const formatTimeHHMM = (d: Date) => {
     return `${formattedHours}:${minutes} ${period}`;
 };
 
+    const now = new Date();
+    const mockReminders: Reminder[] = [
+      {
+        id: 'r1',
+        title: 'Morning run',
+        description: '5km run in the park',
+        scheduledTime: new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000), // 5 days ago
+        isActive: false,
+        createdAt: new Date(now.getTime() - 6 * 24 * 60 * 60 * 1000),
+        updatedAt: new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000),
+      },
+      {
+        id: 'r2',
+        title: 'Team sync',
+        description: 'Weekly engineering sync',
+        scheduledTime: new Date(now.getTime() - 24 * 60 * 60 * 1000), // 1 day ago
+        isActive: false,
+        createdAt: new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000),
+        updatedAt: new Date(now.getTime() - 24 * 60 * 60 * 1000),
+      },
+      {
+        id: 'r3',
+        title: 'Pay bills',
+        description: 'Electricity and internet',
+        scheduledTime: new Date(now.getTime() - 2 * 60 * 60 * 1000), // 2 hours ago
+        isActive: false,
+        createdAt: new Date(now.getTime() - 3 * 60 * 60 * 1000),
+        updatedAt: new Date(now.getTime() - 2 * 60 * 60 * 1000),
+      },
+      {
+        id: 'r4',
+        title: 'Prepare presentation',
+        description: 'Slides for product demo',
+        scheduledTime: new Date(now.getTime() - 30 * 60 * 1000), // 30 minutes ago
+        isActive: false,
+        createdAt: new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000),
+        updatedAt: new Date(now.getTime() - 30 * 60 * 1000),
+      },
+      {
+        id: 'r5',
+        title: 'Call with mentor',
+        description: 'Monthly career catch-up',
+        scheduledTime: new Date(now.getTime() + 10 * 60 * 1000), // 10 minutes from now
+        isActive: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        notificationId: 'n5',
+      },
+      {
+        id: 'r6',
+        title: 'Lunch with Sara',
+        description: 'Try the new cafe',
+        scheduledTime: new Date(now.getTime() + 60 * 60 * 1000), // 1 hour from now
+        isActive: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        notificationId: 'n6',
+      },
+      {
+        id: 'r7',
+        title: 'Doctor appointment',
+        description: 'Annual check-up',
+        scheduledTime: new Date(now.getTime() + 3 * 60 * 60 * 1000), // 3 hours from now
+        isActive: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        notificationId: 'n7',
+      },
+      {
+        id: 'r8',
+        title: 'Buy groceries',
+        description: 'Milk, eggs, bread',
+        scheduledTime: new Date(now.getTime() + 24 * 60 * 60 * 1000), // 1 day from now
+        isActive: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        id: 'r9',
+        title: 'Anniversary dinner',
+        description: 'Reserve a table',
+        scheduledTime: new Date(now.getTime() + 2 * 24 * 60 * 60 * 1000), // 2 days from now
+        isActive: false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        id: 'r10',
+        title: 'Project milestone',
+        description: 'Finalize release notes',
+        scheduledTime: new Date(now.getTime() + 5 * 24 * 60 * 60 * 1000), // 5 days
+        isActive: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        id: 'r11',
+        title: 'Gym session',
+        description: 'Leg day',
+        scheduledTime: new Date(now.getTime() + 10 * 24 * 60 * 60 * 1000), // 10 days
+        isActive: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        id: 'r12',
+        title: 'Renew subscription',
+        description: 'Streaming service',
+        scheduledTime: new Date(now.getTime() - 10 * 24 * 60 * 60 * 1000), // 10 days ago
+        isActive: false,
+        createdAt: new Date(now.getTime() - 11 * 24 * 60 * 60 * 1000),
+        updatedAt: new Date(now.getTime() - 10 * 24 * 60 * 60 * 1000),
+      },
+      {
+        id: 'r13',
+        title: 'Call mom',
+        description: 'Weekly check-in',
+        scheduledTime: new Date(now.getTime() + 30 * 60 * 1000), // 30 minutes
+        isActive: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        id: 'r14',
+        title: 'Read a chapter',
+        description: 'Book: Clean Code',
+        scheduledTime: new Date(now.getTime() + 6 * 60 * 60 * 1000), // 6 hours
+        isActive: false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        id: 'r15',
+        title: 'Plan weekend trip',
+        description: 'Find a cabin',
+        scheduledTime: new Date(now.getTime() + 12 * 24 * 60 * 60 * 1000), // 12 days
+        isActive: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    ];
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [formData, setFormData] = useState<ReminderFormData>({
     title: '',
@@ -33,6 +174,8 @@ const formatTimeHHMM = (d: Date) => {
   });
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Edit mode state
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -76,8 +219,8 @@ const formatTimeHHMM = (d: Date) => {
 
   const loadReminders = async () => {
     // TODO: Load from SQLite database
-    // For now, using empty array
-    setReminders([]);
+    // For demo, use mock data
+    setReminders(mockReminders);
   };
 
   const handleCreateReminder = async () => {
@@ -122,6 +265,7 @@ const formatTimeHHMM = (d: Date) => {
         setScheduledAt(now);
 
         Alert.alert('Success', 'Reminder created successfully!');
+        setShowCreateModal(false);
       } else {
         Alert.alert('Error', 'Please enable notifications to add reminders!');
       }
@@ -297,80 +441,108 @@ const formatTimeHHMM = (d: Date) => {
     }
   };
 
+  // Search filter (case-insensitive on title + description)
+  const q = searchQuery.trim().toLowerCase();
+  const filteredReminders = q.length === 0
+    ? reminders
+    : reminders.filter(r =>
+        r.title.toLowerCase().includes(q) || (r.description?.toLowerCase().includes(q) ?? false)
+      );
+
   // Grouped & sorted (by time descending)
-  const activeReminders = reminders
+  const activeReminders = filteredReminders
     .filter(r => r.isActive)
     .slice()
     .sort((a, b) => new Date(b.scheduledTime).getTime() - new Date(a.scheduledTime).getTime());
-  const inactiveReminders = reminders
+  const inactiveReminders = filteredReminders
     .filter(r => !r.isActive)
     .slice()
     .sort((a, b) => new Date(b.scheduledTime).getTime() - new Date(a.scheduledTime).getTime());
 
   return (
-    <ScrollView className="flex-1 bg-gray-50 p-4">
-      <Text className="text-2xl font-bold mb-6 text-center text-slate-800">Reminders</Text>
-      
-      {/* Create Reminder Form */}
-      <View className="bg-white p-4 rounded-2xl mb-6 border border-slate-200 shadow-sm">
-        <Text className="text-lg font-semibold mb-4 text-slate-800">Create New Reminder</Text>
-        
-        <TextInput
-          placeholder="Reminder title"
-          value={formData.title}
-          onChangeText={(text) => setFormData(prev => ({ ...prev, title: text }))}
-          className="border border-gray-300 rounded-lg p-3 mb-3 bg-white"
-        />
-        
-        <TextInput
-          placeholder="Description (optional)"
-          value={formData.description}
-          onChangeText={(text) => setFormData(prev => ({ ...prev, description: text }))}
-          className="border border-gray-300 rounded-lg p-3 mb-3 bg-white"
-          multiline
-          numberOfLines={2}
-        />
-        
-        <View className="flex-row gap-3 mb-4">
-          <View className="flex-1">
-            <Text className="text-sm font-medium mb-1 text-slate-600">Date</Text>
-            <TouchableOpacity onPress={() => setShowDatePicker(true)} className="border border-slate-300 rounded-lg p-3 bg-white">
-              <Text className="text-slate-800">{formattedDate}</Text>
-            </TouchableOpacity>
-          </View>
-          <View className="flex-1">
-            <Text className="text-sm font-medium mb-1 text-slate-600">Time</Text>
-            <TouchableOpacity onPress={() => setShowTimePicker(true)} className="border border-slate-300 rounded-lg p-3 bg-white">
-              <Text className="text-slate-800">{formattedTime}</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {showDatePicker && (
-          <DateTimePicker
-            value={scheduledAt}
-            mode="date"
-            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-            onChange={onChangeDate}
-          />
-        )}
-        {showTimePicker && (
-          <DateTimePicker
-            value={scheduledAt}
-            mode="time"
-            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-            onChange={onChangeTime}
-            is24Hour={false}
-          />
-        )}
-        
+    <ScrollView className="flex-1 bg-slate-50 p-4">
+      {/* Header with title and Add button */}
+      <View className="flex-row items-center justify-between mb-4">
+        <Text className="text-2xl font-bold text-slate-800">All Reminders</Text>
         <TouchableOpacity
-          onPress={handleCreateReminder}
-          className="bg-blue-500 rounded-lg p-3"
+          onPress={() => setShowCreateModal(true)}
+          className="bg-emerald-600 rounded-xl px-5 py-3 shadow-md active:opacity-90"
         >
-          <Text className="text-white text-center font-semibold">Create Reminder</Text>
+          <Text className="text-white font-semibold">+ Add</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Search bar */}
+      <View className="mb-6">
+        <TextInput
+          placeholder="Search reminders..."
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          className="border border-slate-300 rounded-2xl px-4 py-3 bg-white text-slate-800"
+        />
+      </View>
+
+      {/* Create Reminder Modal */}
+      <Modal visible={showCreateModal} transparent animationType="fade" onRequestClose={() => setShowCreateModal(false)}>
+        <View className="flex-1 bg-black/40 items-center justify-center p-4">
+          <View className="w-full rounded-2xl bg-white p-4 border border-slate-200">
+            <Text className="text-xl font-semibold mb-4 text-slate-800">Create New Reminder</Text>
+            <TextInput
+              placeholder="Reminder title"
+              value={formData.title}
+              onChangeText={(text) => setFormData(prev => ({ ...prev, title: text }))}
+              className="border border-slate-300 rounded-lg p-3 mb-3 bg-white"
+            />
+            <TextInput
+              placeholder="Description (optional)"
+              value={formData.description}
+              onChangeText={(text) => setFormData(prev => ({ ...prev, description: text }))}
+              className="border border-slate-300 rounded-lg p-3 mb-3 bg-white"
+              multiline
+              numberOfLines={2}
+            />
+            <View className="flex-row gap-3 mb-3">
+              <View className="flex-1">
+                <Text className="text-sm font-medium mb-1 text-slate-600">Date</Text>
+                <TouchableOpacity onPress={() => setShowDatePicker(true)} className="border border-slate-300 rounded-lg p-3 bg-white">
+                  <Text className="text-slate-800">{formattedDate}</Text>
+                </TouchableOpacity>
+              </View>
+              <View className="flex-1">
+                <Text className="text-sm font-medium mb-1 text-slate-600">Time</Text>
+                <TouchableOpacity onPress={() => setShowTimePicker(true)} className="border border-slate-300 rounded-lg p-3 bg-white">
+                  <Text className="text-slate-800">{formattedTime}</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+            {showDatePicker && (
+              <DateTimePicker
+                value={scheduledAt}
+                mode="date"
+                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                onChange={onChangeDate}
+              />
+            )}
+            {showTimePicker && (
+              <DateTimePicker
+                value={scheduledAt}
+                mode="time"
+                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                onChange={onChangeTime}
+                is24Hour={false}
+              />
+            )}
+            <View className="flex-row gap-3 mt-2">
+              <TouchableOpacity onPress={() => setShowCreateModal(false)} className="flex-1 bg-slate-200 rounded-lg p-3">
+                <Text className="text-slate-800 text-center font-semibold">Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handleCreateReminder} className="flex-1 bg-emerald-600 rounded-lg p-3">
+                <Text className="text-white text-center font-semibold">Create</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Reminders List */}
       <View>
