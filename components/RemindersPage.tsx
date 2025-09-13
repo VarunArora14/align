@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ScrollView, Alert, Switch, Platform } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ScrollView, Alert, Switch, Platform, AppState } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as Notifications from 'expo-notifications';
 import { NotificationService } from '../services/notificationService';
@@ -52,9 +52,18 @@ const formatTimeHHMM = (d: Date) => {
       setReminders(prev => prev.map(r => r.id === idFromData ? { ...r, isActive: false } : r));
     });
 
+    // Also reconcile when app comes to foreground (handles ignored notifications)
+    const appStateSub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        const now = new Date();
+        setReminders(prev => prev.map(r => (r.isActive && new Date(r.scheduledTime) <= now) ? { ...r, isActive: false } : r));
+      }
+    });
+
     return () => {
       receivedSub.remove();
       responseSub.remove();
+      appStateSub.remove();
     };
   }, []);
 
