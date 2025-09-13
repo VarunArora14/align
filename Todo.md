@@ -1,3 +1,3 @@
-- Implement chatbox for reminders first at bottom of screen
 - Integrate Gemini API for strucutred outputs logging
 - Create workflow for gemini to uderstad intet and then create the reminder based off info. Cosider flow details as if partial details present then allow user to enter them/review them and then set reminder
+- Populate the "Create new reminder" and allow to create

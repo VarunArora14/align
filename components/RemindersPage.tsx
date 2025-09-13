@@ -1,13 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, Alert, Switch, Platform, AppState, Modal, Keyboard, TouchableWithoutFeedback } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, Alert, Switch, Platform, AppState, Modal, Keyboard, TouchableWithoutFeedback, ToastAndroid } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as Notifications from 'expo-notifications';
 import { NotificationService } from '../services/notificationService';
-import type { Reminder, ReminderFormData } from '../types/reminder';
+import { geminiService, GeminiService } from '../services/geminiService';
+import type { Reminder, ReminderFormData, ParsedReminderData } from '../types/reminder';
 
 export const RemindersPage = () => {
+  // NOTE: We intentionally use a single popup (Alert/modal) UX for fallback so the user
+  // isn't shown both a toast and a popup. The popup will let the user manually add the reminder.
+
   // Helpers for consistent formatting: DD-MM-YYYY and HH:MM (24h)
 const pad2 = (n: number) => n.toString().padStart(2, '0');
 const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -298,6 +302,29 @@ const formatTimeHHMM = (d: Date) => {
     }
   };
 
+  // Open the create modal and pre-fill with provided title (used by Manual Add flow)
+  const handleOpenManualAdd = (titleText: string) => {
+    // Pre-fill title and clear description/date/time so user can adjust
+    setFormData({ title: titleText, description: '', date: '', time: '' });
+    const now = new Date();
+    now.setSeconds(0,0);
+    now.setMinutes(now.getMinutes() + 1);
+    setScheduledAt(now);
+    setShowCreateModal(true);
+  };
+
+  // Cancel create modal and clear any entered data
+  const handleCancelCreate = () => {
+    setShowCreateModal(false);
+    setFormData({ title: '', description: '', date: '', time: '' });
+    const now = new Date();
+    now.setSeconds(0,0)
+    now.setMinutes(now.getMinutes()+1);
+    setScheduledAt(now);
+    setShowDatePicker(false);
+    setShowTimePicker(false);
+  };
+
   const handleToggleReminder = async (reminder: Reminder, value: boolean) => {
     try {
       if (value) {
@@ -337,7 +364,6 @@ const formatTimeHHMM = (d: Date) => {
                 setEditingId(null);
                 setEditScheduledAt(null);
               }
-              Alert.alert('Deleted', 'Reminder deleted');
             } catch (error) {
               console.error('Error deleting reminder:', error);
               Alert.alert('Error', 'Failed to delete reminder');
@@ -383,16 +409,79 @@ const formatTimeHHMM = (d: Date) => {
 
   // Chat input state for natural language reminder text
   const [chatText, setChatText] = useState('');
+  const [isProcessingChat, setIsProcessingChat] = useState(false);
 
-  const handleSendChat = () => {
+  const handleSendChat = async () => {
     const text = chatText.trim();
-    if (!text) return;
-    // Placeholder: for now just log and clear. Integration with LLM/creation will be added later.
-    console.log('Send chat message:', text);
-    // Clear input after send
-    setChatText('');
-    // Optional: give quick feedback
-    Alert.alert('Message sent', 'Your reminder text was sent. (Placeholder)');
+    if (!text) {
+      // Cross-platform small prompt: Toast on Android, Alert on iOS
+      if (Platform.OS === 'android') {
+        ToastAndroid.show('Please enter a reminder before sending', ToastAndroid.SHORT);
+      } else {
+        Alert.alert('Enter reminder', 'Please enter a reminder before sending');
+      }
+      return;
+    }
+    
+    if (isProcessingChat) return; // Prevent multiple simultaneous requests
+
+    setIsProcessingChat(true);
+    setChatText(''); // Clear input immediately for better UX
+
+    try {
+      // Parse the natural language text using Gemini
+      const parsedData: ParsedReminderData = await geminiService.parseReminderText(text);
+      
+      // Check if fallback parsing was used
+      if (parsedData.usedFallback ) {
+        // Use a single popup/modal flow: ask the user to manually add or retry
+        Alert.alert(
+          'Could not understand your reminder',
+          'Please try rephrasing or add the reminder manually.',
+          [
+            { text: 'Retry', style: 'cancel', onPress: () => setChatText(text) },
+            { text: 'Manual Add', onPress: () => handleOpenManualAdd(text) }
+          ]
+        );
+
+        return;
+      }
+      
+      // Prefill the create modal with parsed fields (let user confirm)
+      // Only set fields that are present in parsedData
+      const prefill: any = {};
+      if (parsedData.title) prefill.title = parsedData.title;
+      if (parsedData.description) prefill.description = parsedData.description;
+      if (parsedData.date) prefill.date = parsedData.date;
+      if (parsedData.time) prefill.time = parsedData.time;
+
+      console.log("prefill data: ", prefill)
+
+      // If relative time is present, compute scheduledAt accordingly
+      try {
+        const computedDate = GeminiService.createScheduledDate(parsedData);
+        setScheduledAt(computedDate);
+      } catch (e) {
+        // fallback: leave scheduledAt unchanged
+      }
+
+      setFormData(prev => ({ ...prev, ...prefill }));
+      setShowCreateModal(true);
+    } catch (error) {
+      console.error('Error processing chat reminder:', error);
+      
+      // Show a popup with retry option
+      Alert.alert(
+        'Failed to process reminder',
+        'An error occurred while processing your reminder. Would you like to retry?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Retry', onPress: () => setChatText(text) }
+        ]
+      );
+    } finally {
+      setIsProcessingChat(false);
+    }
   };
 
   // Edit helpers
@@ -529,7 +618,7 @@ const formatTimeHHMM = (d: Date) => {
       </View>
 
       {/* Create Reminder Modal */}
-      <Modal visible={showCreateModal} transparent animationType="fade" onRequestClose={() => setShowCreateModal(false)}>
+  <Modal visible={showCreateModal} transparent animationType="fade" onRequestClose={handleCancelCreate}>
         <View className="flex-1 bg-black/40 items-center justify-center p-4">
           <View className="w-full rounded-2xl bg-white p-4 border border-slate-200">
             <Text className="text-xl font-semibold mb-4 text-slate-800">Create New Reminder</Text>
@@ -579,7 +668,7 @@ const formatTimeHHMM = (d: Date) => {
               />
             )}
             <View className="flex-row gap-3 mt-2">
-              <TouchableOpacity onPress={() => setShowCreateModal(false)} className="flex-1 bg-slate-200 rounded-lg p-3">
+              <TouchableOpacity onPress={handleCancelCreate} className="flex-1 bg-slate-200 rounded-lg p-3">
                 <Text className="text-slate-800 text-center font-semibold">Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity onPress={handleCreateReminder} className="flex-1 bg-emerald-600 rounded-lg p-3">
@@ -846,15 +935,26 @@ const formatTimeHHMM = (d: Date) => {
         <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
           <View className="flex-row items-center">
             <TextInput
-              placeholder="What do you want to be reminded of?"
+              placeholder={isProcessingChat ? "Processing..." : "What do you want to be reminded of?"}
               value={chatText}
               onChangeText={setChatText}
-              className="flex-1 border border-slate-300 rounded-full px-4 py-3 mr-3 bg-slate-50 text-slate-800"
+              className={`flex-1 border border-slate-300 rounded-full px-4 py-3 mr-3 text-slate-800 ${
+                isProcessingChat ? 'bg-slate-100' : 'bg-slate-50'
+              }`}
               returnKeyType="send"
               onSubmitEditing={handleSendChat}
+              editable={!isProcessingChat}
             />
-            <TouchableOpacity onPress={handleSendChat} className="bg-emerald-600 p-3 rounded-full">
-              <Text className="text-white font-bold">➤</Text>
+            <TouchableOpacity 
+              onPress={handleSendChat} 
+              className={`p-3 rounded-full ${
+                isProcessingChat ? 'bg-slate-400' : 'bg-emerald-600'
+              }`}
+              disabled={isProcessingChat}
+            >
+              <Text className="text-white font-bold">
+                {isProcessingChat ? '⋯' : '➤'}
+              </Text>
             </TouchableOpacity>
           </View>
         </TouchableWithoutFeedback>

@@ -16,4 +16,14 @@ export interface ReminderFormData {
     time: string; // HH:MM format
 }
 
+export interface ParsedReminderData {
+    title: string;
+    description?: string;
+    date?: string; // YYYY-MM-DD format
+    time?: string; // HH:MM format (24-hour)
+    isRelativeTime?: boolean; // true if time is relative (e.g., "in 30 minutes")
+    relativeMinutes?: number; // minutes from now if isRelativeTime is true
+    usedFallback?: boolean; // true if the parser used a fallback heuristic
+}
+
 export type ReminderStatus = 'active' | 'completed' | 'cancelled';
