@@ -1,0 +1,3 @@
+- Active and Inactive reminders
+- Off the reminder once user is notified
+- 

@@ -10,7 +10,6 @@ async function ensureInitialized() {
     // Configure notification handling
     Notifications.setNotificationHandler({
         handleNotification: async () => ({
-            shouldShowAlert: true,
             shouldPlaySound: true,
             shouldSetBadge: false,
             shouldShowList: true,
@@ -56,6 +55,7 @@ export class NotificationService {
             body: reminder.description || 'Time for your reminder!',
             sound: 'default',
             priority: Notifications.AndroidNotificationPriority.HIGH,
+            data: { reminderId: reminder.id },
         };
 
         // Use a Date trigger with explicit type compatible with SDK 53 types

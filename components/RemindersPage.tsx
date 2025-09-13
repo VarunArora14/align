@@ -1,10 +1,23 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, Alert, Switch, Platform } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import * as Notifications from 'expo-notifications';
 import { NotificationService } from '../services/notificationService';
 import type { Reminder, ReminderFormData } from '../types/reminder';
 
 export const RemindersPage = () => {
+  // Helpers for consistent formatting: DD-MM-YYYY and HH:MM (24h)
+const pad2 = (n: number) => n.toString().padStart(2, '0');
+const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const formatDateDDMMYYYY = (d: Date) => `${pad2(d.getDate())}-${monthNames[d.getMonth()]}-${d.getFullYear()}`;
+const formatTimeHHMM = (d: Date) => {
+    const hours = d.getHours();
+    const minutes = pad2(d.getMinutes());
+    const period = hours >= 12 ? 'pm' : 'am';
+    const formattedHours = hours % 12 || 12; // Convert 0 to 12 for 12-hour format
+    return `${formattedHours}:${minutes} ${period}`;
+};
+
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [formData, setFormData] = useState<ReminderFormData>({
     title: '',
@@ -24,6 +37,25 @@ export const RemindersPage = () => {
   useEffect(() => {
     // Load existing reminders from storage (placeholder for now)
     loadReminders();
+
+    // Listener: when a notification is received (app foreground) mark matching reminder inactive
+    const receivedSub = Notifications.addNotificationReceivedListener((event) => {
+      const idFromData = (event.request.content.data as any)?.reminderId as string | undefined;
+      if (!idFromData) return;
+      setReminders(prev => prev.map(r => r.id === idFromData ? { ...r, isActive: false } : r));
+    });
+
+    // Listener: when user interacts with the notification (tap) ensure reminder is inactive
+    const responseSub = Notifications.addNotificationResponseReceivedListener((response) => {
+      const idFromData = (response.notification.request.content.data as any)?.reminderId as string | undefined;
+      if (!idFromData) return;
+      setReminders(prev => prev.map(r => r.id === idFromData ? { ...r, isActive: false } : r));
+    });
+
+    return () => {
+      receivedSub.remove();
+      responseSub.remove();
+    };
   }, []);
 
   const loadReminders = async () => {
@@ -118,7 +150,7 @@ export const RemindersPage = () => {
   };
 
   const formatDateTime = (date: Date) => {
-    return date.toLocaleString();
+    return `${formatDateDDMMYYYY(date)} ${formatTimeHHMM(date)}`;
   };
 
   const onChangeDate = (_: any, date?: Date) => {
@@ -129,7 +161,7 @@ export const RemindersPage = () => {
       setScheduledAt(updated);
       setFormData(prev => ({
         ...prev,
-        date: updated.toISOString().split('T')[0],
+        date: formatDateDDMMYYYY(updated),
       }));
     }
   };
@@ -142,13 +174,23 @@ export const RemindersPage = () => {
       setScheduledAt(updated);
       setFormData(prev => ({
         ...prev,
-        time: updated.toTimeString().slice(0, 5),
+        time: formatTimeHHMM(updated),
       }));
     }
   };
 
-  const formattedDate = scheduledAt.toLocaleDateString();
-  const formattedTime = scheduledAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const formattedDate = formatDateDDMMYYYY(scheduledAt);
+  const formattedTime = formatTimeHHMM(scheduledAt);
+
+  // Grouped & sorted (by time descending)
+  const activeReminders = reminders
+    .filter(r => r.isActive)
+    .slice()
+    .sort((a, b) => new Date(b.scheduledTime).getTime() - new Date(a.scheduledTime).getTime());
+  const inactiveReminders = reminders
+    .filter(r => !r.isActive)
+    .slice()
+    .sort((a, b) => new Date(b.scheduledTime).getTime() - new Date(a.scheduledTime).getTime());
 
   return (
     <ScrollView className="flex-1 bg-gray-50 p-4">
@@ -218,55 +260,113 @@ export const RemindersPage = () => {
       {/* Reminders List */}
       <View>
         <Text className="text-lg font-semibold mb-4 text-slate-800">Your Reminders</Text>
-        
-        {reminders.length === 0 ? (
+
+        {activeReminders.length === 0 && inactiveReminders.length === 0 ? (
           <Text className="text-gray-500 text-center py-8">
             No reminders yet. Create your first reminder above!
           </Text>
         ) : (
-          reminders.map((reminder) => {
-            const isActive = reminder.isActive;
-            return (
-              <View
-                key={reminder.id}
-                className={`rounded-2xl p-4 mb-3 border shadow-sm ${isActive ? 'bg-white border-emerald-200' : 'bg-white border-slate-200'}`}
-              >
-                <View className="flex-row items-center justify-between">
-                  <View className="flex-1 pr-3">
-                    <Text className="text-base font-semibold text-slate-800">{reminder.title}</Text>
-                    {reminder.description ? (
-                      <Text className="text-slate-600 mt-1">{reminder.description}</Text>
-                    ) : null}
-                    <View className="flex-row items-center mt-2">
-                      <View className={`px-2 py-1 rounded-full ${isActive ? 'bg-emerald-50' : 'bg-slate-100'}`}>
-                        <Text className={`${isActive ? 'text-emerald-700' : 'text-slate-600'} text-xs`}>
-                          {formatDateTime(reminder.scheduledTime)}
-                        </Text>
+          <>
+            {/* Active section */}
+            <Text className="text-base font-semibold mb-2 text-emerald-700">Active: {activeReminders.length}</Text>
+            {activeReminders.length === 0 ? (
+              <Text className="text-slate-500 mb-4">No active reminders</Text>
+            ) : (
+              activeReminders.map((reminder) => {
+                const isActive = true;
+                return (
+                  <View
+                    key={reminder.id}
+                    className={`rounded-2xl p-4 mb-3 border shadow-sm bg-white border-emerald-200`}
+                  >
+                    <View className="flex-row items-center justify-between">
+                      <View className="flex-1 pr-3">
+                        <Text className="text-base font-semibold text-slate-800">{reminder.title}</Text>
+                        {reminder.description ? (
+                          <Text className="text-slate-600 mt-1">{reminder.description}</Text>
+                        ) : null}
+                        <View className="flex-row items-center mt-2">
+                          <View className={`px-2 py-1 rounded-full bg-emerald-50`}>
+                            <Text className={`text-emerald-700 text-xs`}>
+                              {formatDateTime(reminder.scheduledTime)}
+                            </Text>
+                          </View>
+                        </View>
+                      </View>
+
+                      <View className="items-end gap-2">
+                        <View className="flex-row items-center">
+                          <Text className="mr-2 text-xs text-slate-600">Active</Text>
+                          <Switch
+                            value={true}
+                            onValueChange={(val) => handleToggleReminder(reminder, val)}
+                            trackColor={{ false: '#e5e7eb', true: '#34d399' }}
+                            thumbColor={'#10b981'}
+                          />
+                        </View>
+                        <TouchableOpacity
+                          onPress={() => handleDeleteReminder(reminder)}
+                          className="bg-rose-500 rounded-lg px-3 py-1"
+                        >
+                          <Text className="text-white text-xs font-medium">Delete</Text>
+                        </TouchableOpacity>
                       </View>
                     </View>
                   </View>
+                );
+              })
+            )}
 
-                  <View className="items-end gap-2">
-                    <View className="flex-row items-center">
-                      <Text className="mr-2 text-xs text-slate-600">{isActive ? 'Active' : 'Inactive'}</Text>
-                      <Switch
-                        value={isActive}
-                        onValueChange={(val) => handleToggleReminder(reminder, val)}
-                        trackColor={{ false: '#e5e7eb', true: '#34d399' }}
-                        thumbColor={isActive ? '#10b981' : '#9ca3af'}
-                      />
+            {/* Inactive section */}
+            <Text className="text-base font-semibold mt-4 mb-2 text-slate-700">Inactive: {inactiveReminders.length}</Text>
+            {inactiveReminders.length === 0 ? (
+              <Text className="text-slate-500">No inactive reminders</Text>
+            ) : (
+              inactiveReminders.map((reminder) => {
+                const isActive = false;
+                return (
+                  <View
+                    key={reminder.id}
+                    className={`rounded-2xl p-4 mb-3 border shadow-sm bg-white border-slate-200`}
+                  >
+                    <View className="flex-row items-center justify-between">
+                      <View className="flex-1 pr-3">
+                        <Text className="text-base font-semibold text-slate-800">{reminder.title}</Text>
+                        {reminder.description ? (
+                          <Text className="text-slate-600 mt-1">{reminder.description}</Text>
+                        ) : null}
+                        <View className="flex-row items-center mt-2">
+                          <View className={`px-2 py-1 rounded-full bg-slate-100`}>
+                            <Text className={`text-slate-600 text-xs`}>
+                              {formatDateTime(reminder.scheduledTime)}
+                            </Text>
+                          </View>
+                        </View>
+                      </View>
+
+                      <View className="items-end gap-2">
+                        <View className="flex-row items-center">
+                          <Text className="mr-2 text-xs text-slate-600">Inactive</Text>
+                          <Switch
+                            value={false}
+                            onValueChange={(val) => handleToggleReminder(reminder, val)}
+                            trackColor={{ false: '#e5e7eb', true: '#34d399' }}
+                            thumbColor={'#9ca3af'}
+                          />
+                        </View>
+                        <TouchableOpacity
+                          onPress={() => handleDeleteReminder(reminder)}
+                          className="bg-rose-500 rounded-lg px-3 py-1"
+                        >
+                          <Text className="text-white text-xs font-medium">Delete</Text>
+                        </TouchableOpacity>
+                      </View>
                     </View>
-                    <TouchableOpacity
-                      onPress={() => handleDeleteReminder(reminder)}
-                      className="bg-rose-500 rounded-lg px-3 py-1"
-                    >
-                      <Text className="text-white text-xs font-medium">Delete</Text>
-                    </TouchableOpacity>
                   </View>
-                </View>
-              </View>
-            );
-          })
+                );
+              })
+            )}
+          </>
         )}
       </View>
     </ScrollView>
