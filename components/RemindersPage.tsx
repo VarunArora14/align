@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ScrollView, Alert, Switch, Platform, AppState, Modal } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ScrollView, Alert, Switch, Platform, AppState, Modal, KeyboardAvoidingView, Keyboard, TouchableWithoutFeedback } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as Notifications from 'expo-notifications';
 import { NotificationService } from '../services/notificationService';
@@ -358,6 +358,20 @@ const formatTimeHHMM = (d: Date) => {
   const formattedDate = formatDateDDMMYYYY(scheduledAt);
   const formattedTime = formatTimeHHMM(scheduledAt);
 
+  // Chat input state for natural language reminder text
+  const [chatText, setChatText] = useState('');
+
+  const handleSendChat = () => {
+    const text = chatText.trim();
+    if (!text) return;
+    // Placeholder: for now just log and clear. Integration with LLM/creation will be added later.
+    console.log('Send chat message:', text);
+    // Clear input after send
+    setChatText('');
+    // Optional: give quick feedback
+    Alert.alert('Message sent', 'Your reminder text was sent. (Placeholder)');
+  };
+
   // Edit helpers
   const startEdit = (reminder: Reminder) => {
     setEditingId(reminder.id);
@@ -460,7 +474,10 @@ const formatTimeHHMM = (d: Date) => {
     .sort((a, b) => new Date(b.scheduledTime).getTime() - new Date(a.scheduledTime).getTime());
 
   return (
-    <ScrollView className="flex-1 bg-slate-50 p-4">
+    <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+        <View className="flex-1 bg-slate-50">
+          <ScrollView className="flex-1 p-4" keyboardShouldPersistTaps="handled">
       {/* Header with title and Add button */}
       <View className="flex-row items-center justify-between mb-4">
         <Text className="text-2xl font-bold text-slate-800">All Reminders</Text>
@@ -544,7 +561,7 @@ const formatTimeHHMM = (d: Date) => {
         </View>
       </Modal>
 
-      {/* Reminders List */}
+  {/* Reminders List */}
       <View>
         <Text className="text-lg font-semibold mb-4 text-slate-800">Your Reminders</Text>
 
@@ -786,6 +803,26 @@ const formatTimeHHMM = (d: Date) => {
           </>
         )}
       </View>
-    </ScrollView>
+      </ScrollView>
+
+      {/* Chat input area pinned to bottom */}
+      <View className="border-t border-slate-200 bg-white p-3 mb-7 ">
+        <View className="flex-row items-center">
+          <TextInput
+            placeholder="What do you want to be reminded of?"
+            value={chatText}
+            onChangeText={setChatText}
+            className="flex-1 border border-slate-300 rounded-full px-4 py-3 mr-3 bg-slate-50 text-slate-800"
+            returnKeyType="send"
+            onSubmitEditing={handleSendChat}
+          />
+          <TouchableOpacity onPress={handleSendChat} className="bg-emerald-600 p-3 rounded-full">
+            <Text className="text-white font-bold">➤</Text>
+          </TouchableOpacity>
+        </View>
+          </View>
+        </View>
+      </TouchableWithoutFeedback>
+    </KeyboardAvoidingView>
   );
 };
