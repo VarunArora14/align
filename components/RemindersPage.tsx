@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ScrollView, Alert, Switch, Platform, AppState, Modal, KeyboardAvoidingView, Keyboard, TouchableWithoutFeedback } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, Alert, Switch, Platform, AppState, Modal, Keyboard, TouchableWithoutFeedback } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as Notifications from 'expo-notifications';
 import { NotificationService } from '../services/notificationService';
@@ -184,6 +186,10 @@ const formatTimeHHMM = (d: Date) => {
   const [showEditDatePicker, setShowEditDatePicker] = useState(false);
   const [showEditTimePicker, setShowEditTimePicker] = useState(false);
 
+  // Keyboard and safe area handling
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const insets = useSafeAreaInsets();
+
   useEffect(() => {
     // Load existing reminders from storage (placeholder for now)
     loadReminders();
@@ -210,10 +216,27 @@ const formatTimeHHMM = (d: Date) => {
       }
     });
 
+    // Keyboard event listeners
+    const keyboardWillShowListener = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      (event) => {
+        setKeyboardHeight(event.endCoordinates.height);
+      }
+    );
+
+    const keyboardWillHideListener = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => {
+        setKeyboardHeight(0);
+      }
+    );
+
     return () => {
       receivedSub.remove();
       responseSub.remove();
       appStateSub.remove();
+      keyboardWillShowListener.remove();
+      keyboardWillHideListener.remove();
     };
   }, []);
 
@@ -475,13 +498,14 @@ const formatTimeHHMM = (d: Date) => {
 
   return (
     <View className="flex-1 bg-slate-50">
-      <ScrollView 
+      <KeyboardAwareScrollView 
         className="flex-1 p-4" 
         keyboardShouldPersistTaps="handled" 
-        contentContainerStyle={{ paddingBottom: 120 }}
-        nestedScrollEnabled={true}
-        keyboardDismissMode="on-drag"
-        automaticallyAdjustKeyboardInsets={true}
+        contentContainerStyle={{ paddingBottom: 20 }}
+        enableOnAndroid={true}
+        extraScrollHeight={20}
+        keyboardOpeningTime={250}
+        showsVerticalScrollIndicator={false}
       >
       {/* Header with title and Add button */}
       <View className="flex-row items-center justify-between mb-4">
@@ -502,25 +526,6 @@ const formatTimeHHMM = (d: Date) => {
           onChangeText={setSearchQuery}
           className="border border-slate-300 rounded-2xl px-4 py-3 bg-white text-slate-800"
         />
-      </View>
-
-    {/* Chat input area pinned to bottom */}
-      <View className="border-t border-slate-200 bg-white p-3 mb-7">
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
-          <View className="flex-row items-center">
-            <TextInput
-              placeholder="What do you want to be reminded of?"
-              value={chatText}
-              onChangeText={setChatText}
-              className="flex-1 border border-slate-300 rounded-full px-4 py-3 mr-3 bg-slate-50 text-slate-800"
-              returnKeyType="send"
-              onSubmitEditing={handleSendChat}
-            />
-            <TouchableOpacity onPress={handleSendChat} className="bg-emerald-600 p-3 rounded-full">
-              <Text className="text-white font-bold">➤</Text>
-            </TouchableOpacity>
-          </View>
-        </TouchableWithoutFeedback>
       </View>
 
       {/* Create Reminder Modal */}
@@ -828,9 +833,32 @@ const formatTimeHHMM = (d: Date) => {
           </>
         )}
       </View>
-      </ScrollView>
+      </KeyboardAwareScrollView>
 
-
+      {/* Chat input area pinned to bottom */}
+      <View 
+        className="border-t border-slate-200 bg-white p-4"
+        style={{ 
+          paddingBottom: Math.max(insets.bottom, keyboardHeight > 0 ? 16 : insets.bottom),
+          marginBottom: keyboardHeight > 0 ? keyboardHeight + insets.bottom : 0 
+        }}
+      >
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+          <View className="flex-row items-center">
+            <TextInput
+              placeholder="What do you want to be reminded of?"
+              value={chatText}
+              onChangeText={setChatText}
+              className="flex-1 border border-slate-300 rounded-full px-4 py-3 mr-3 bg-slate-50 text-slate-800"
+              returnKeyType="send"
+              onSubmitEditing={handleSendChat}
+            />
+            <TouchableOpacity onPress={handleSendChat} className="bg-emerald-600 p-3 rounded-full">
+              <Text className="text-white font-bold">➤</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableWithoutFeedback>
+      </View>
     </View>
   );
 };
