@@ -8,14 +8,14 @@ type ScreenContentProps = {
   children?: React.ReactNode;
 };
 
-export const ScreenContent = ({ title, path, children} : ScreenContentProps) => {
+export const ScreenContent = ({ title, path, children }: ScreenContentProps) => {
   return (
     <View className={styles.container}>
       <Text className={styles.title}>{title}</Text>
       <View className={styles.separator} />
       <EditScreenInfo path={path} />
       {children}
-      <Text className='text-3xl'>Hello World</Text>
+      <Text className="text-3xl">Hello World</Text>
     </View>
   );
 };
