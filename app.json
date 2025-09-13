@@ -3,27 +3,16 @@
     "name": "align",
     "slug": "align",
     "version": "1.0.0",
-    
-    
-      "web": {
-        "favicon": "./assets/favicon.png"
-      },
-      
-        "experiments": {
-          "tsconfigPaths": true
-        },
-      
-      "plugins": [
-        
-        
-        
-      ],
-    
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "experiments": {
+      "tsconfigPaths": true
+    },
+    "plugins": [],
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    
-     "userInterfaceStyle": "light",
-    
+    "userInterfaceStyle": "light",
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
@@ -39,7 +28,8 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
-      }
+      },
+      "package": "com.anonymous.align"
     }
   }
 }

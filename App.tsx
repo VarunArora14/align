@@ -1,4 +1,5 @@
 import { ScreenContent } from 'components/ScreenContent';
+import { RemindersPage } from 'components/RemindersPage';
 import { StatusBar } from 'expo-status-bar';
 
 import './global.css';
@@ -6,7 +7,9 @@ import './global.css';
 export default function App() {
   return (
     <>
-      <ScreenContent title="Home" path="App.tsx"></ScreenContent>
+      <ScreenContent title="Align - Goal Reminders" path="App.tsx">
+        <RemindersPage />
+      </ScreenContent>
       <StatusBar style="auto" />
     </>
   );

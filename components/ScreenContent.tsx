@@ -13,14 +13,12 @@ export const ScreenContent = ({ title, path, children }: ScreenContentProps) => 
     <View className={styles.container}>
       <Text className={styles.title}>{title}</Text>
       <View className={styles.separator} />
-      <EditScreenInfo path={path} />
       {children}
-      <Text className="text-3xl">Hello World</Text>
     </View>
   );
 };
 const styles = {
-  container: `items-center flex-1 justify-center`,
-  separator: `h-[1px] my-7 w-4/5 bg-gray-200`,
-  title: `text-xl font-bold`,
+  container: `flex-1 bg-gray-100`,
+  separator: `h-[1px] my-4 w-full bg-gray-200`,
+  title: `text-2xl font-bold text-center py-4 bg-white`,
 };
