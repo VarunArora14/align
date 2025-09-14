@@ -10,7 +10,7 @@ export class GeminiService {
         // In production, this should come from environment variables
         const key = apiKey || process.env.EXPO_PUBLIC_GEMINI_API_KEY || 'AIzaSyClZsDlFy7I_3vgu9f6pjEV5skYpu2e24Y';
         this.genAI = new GoogleGenerativeAI(key);
-        this.model = this.genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+        this.model = this.genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
     }
 
     /**
@@ -28,7 +28,7 @@ export class GeminiService {
 
             // Parse the JSON response
             const parsedData = this.parseGeminiResponse(text);
-            console.log("Gemini parsed data: ", parsedData)
+            // console.log("Gemini parsed data: ", parsedData)
             return parsedData;
         } catch (error) {
             console.error('Error parsing reminder with Gemini:', error);

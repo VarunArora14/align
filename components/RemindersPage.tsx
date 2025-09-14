@@ -6,6 +6,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import * as Notifications from 'expo-notifications';
 import { NotificationService } from '../services/notificationService';
 import { geminiService, GeminiService } from '../services/geminiService';
+import * as ReminderRepo from '../services/reminderRepository';
 import type { Reminder, ReminderFormData, ParsedReminderData } from '../types/reminder';
 
 export const RemindersPage = () => {
@@ -196,8 +197,18 @@ const formatTimeHHMM = (d: Date) => {
   const insets = useSafeAreaInsets();
 
   useEffect(() => {
-    // Load existing reminders from storage (placeholder for now)
-    loadReminders();
+    // Init DB and load existing reminders from SQLite
+    (async () => {
+      try {
+        await ReminderRepo.initDB();
+        const rows = await ReminderRepo.getAllReminders();
+        setReminders(rows);
+      } catch (e) {
+        console.error('Failed to init/load reminders', e);
+        // fallback to mock data
+        setReminders(mockReminders);
+      }
+    })();
 
     // Listener: when a notification is received (app foreground) mark matching reminder inactive
     const receivedSub = Notifications.addNotificationReceivedListener(async (event) => {
@@ -270,17 +281,15 @@ const formatTimeHHMM = (d: Date) => {
     };
   }, []);
 
-  const loadReminders = async () => {
-    // TODO: Load from SQLite database
-    // For demo, use mock data
-    setReminders(mockReminders);
-  };
+
 
   const handleRescheduleDailyReminder = async (reminder: Reminder) => {
     try {
       if (reminder.repeat === 'daily' && reminder.notificationId) {
         const newNotificationId = await NotificationService.rescheduleDailyReminder(reminder);
         if (newNotificationId) {
+          // Persist updated notificationId so app restarts still know the current scheduled id
+          await ReminderRepo.updateReminderNotificationId(reminder.id, newNotificationId);
           setReminders(prev => prev.map(r => 
             r.id === reminder.id 
               ? { ...r, notificationId: newNotificationId }
@@ -320,26 +329,27 @@ const formatTimeHHMM = (d: Date) => {
 
       // Schedule notification
       const notificationId = await NotificationService.scheduleReminderNotification(newReminder);
-      
-      if (notificationId) {
-        // console.log("notification ID:" + notificationId)
-        newReminder.notificationId = notificationId;
-        
-        // Add to reminders list
-        setReminders(prev => [...prev, newReminder]);
-        
-        // Clear form
-  setFormData({ title: '', description: '', date: '', time: '', repeatDaily: false });
-        const now = new Date();
-        now.setSeconds(0,0)
-        now.setMinutes(now.getMinutes() + 1);
-        setScheduledAt(now);
 
-        Alert.alert('Success', 'Reminder created successfully!');
-        setShowCreateModal(false);
-      } else {
+      if (!notificationId) {
         Alert.alert('Error', 'Please enable notifications to add reminders!');
+        return;
       }
+
+      newReminder.notificationId = notificationId;
+
+      // Persist to DB and update UI (single call, no N+1)
+      await ReminderRepo.createReminder(newReminder);
+      setReminders(prev => [...prev, newReminder]);
+
+      // Clear form
+      setFormData({ title: '', description: '', date: '', time: '', repeatDaily: false });
+      const now = new Date();
+      now.setSeconds(0,0)
+      now.setMinutes(now.getMinutes() + 1);
+      setScheduledAt(now);
+
+      Alert.alert('Success', 'Reminder created successfully!');
+      setShowCreateModal(false);
     } catch (error) {
       console.error('Error creating reminder:', error);
       Alert.alert('Error', 'Failed to create reminder');
@@ -377,12 +387,17 @@ const formatTimeHHMM = (d: Date) => {
           return;
         }
         const id = await NotificationService.scheduleReminderNotification(reminder);
-        setReminders(prev => prev.map(r => r.id === reminder.id ? { ...r, isActive: true, notificationId: id ?? r.notificationId } : r));
+        // Persist activation + notificationId
+        const updated = { ...reminder, isActive: true, notificationId: id ?? reminder.notificationId, updatedAt: new Date() };
+        await ReminderRepo.updateReminder(updated);
+        setReminders(prev => prev.map(r => r.id === reminder.id ? updated : r));
       } else {
         if (reminder.notificationId) {
           await NotificationService.cancelNotification(reminder.notificationId);
         }
-        setReminders(prev => prev.map(r => r.id === reminder.id ? { ...r, isActive: false } : r));
+  const updated = { ...reminder, isActive: false, notificationId: undefined, updatedAt: new Date() };
+        await ReminderRepo.updateReminder(updated);
+        setReminders(prev => prev.map(r => r.id === reminder.id ? updated : r));
       }
     } catch (e) {
       console.error('Error toggling reminder', e);
@@ -403,6 +418,7 @@ const formatTimeHHMM = (d: Date) => {
               if (reminder.notificationId) {
                 await NotificationService.cancelNotification(reminder.notificationId);
               }
+              await ReminderRepo.deleteReminder(reminder.id);
               setReminders(prev => prev.filter(r => r.id !== reminder.id));
               if (editingId === reminder.id) {
                 setEditingId(null);
@@ -615,9 +631,14 @@ const formatTimeHHMM = (d: Date) => {
           Alert.alert('Error', 'Please enable notifications to update reminders!');
           return;
         }
+        updatedReminder.notificationId = newNotificationId;
+      } else {
+  updatedReminder.notificationId = undefined;
       }
 
-      setReminders(prev => prev.map(r => r.id === reminder.id ? { ...updatedReminder, notificationId: newNotificationId ?? r.notificationId } : r));
+      // Persist update in a single call
+      await ReminderRepo.updateReminder(updatedReminder);
+      setReminders(prev => prev.map(r => r.id === reminder.id ? updatedReminder : r));
       cancelEdit();
       Alert.alert('Saved', 'Reminder updated successfully');
     } catch (e) {
@@ -634,15 +655,25 @@ const formatTimeHHMM = (d: Date) => {
         r.title.toLowerCase().includes(q) || (r.description?.toLowerCase().includes(q) ?? false)
       );
 
-  // Grouped & sorted (by time descending)
+  // Custom sorting function: daily reminders first, then by scheduledTime descending
+  const sortReminders = (a: Reminder, b: Reminder) => {
+    // If one is daily and the other isn't, daily comes first
+    if (a.repeat === 'daily' && b.repeat !== 'daily') return -1;
+    if (a.repeat !== 'daily' && b.repeat === 'daily') return 1;
+    
+    // If both are daily or both are not daily, sort by scheduledTime descending (latest first)
+    return new Date(b.scheduledTime).getTime() - new Date(a.scheduledTime).getTime();
+  };
+
+  // Grouped & sorted (daily first, then by time descending)
   const activeReminders = filteredReminders
     .filter(r => r.isActive)
     .slice()
-    .sort((a, b) => new Date(b.scheduledTime).getTime() - new Date(a.scheduledTime).getTime());
+    .sort(sortReminders);
   const inactiveReminders = filteredReminders
     .filter(r => !r.isActive)
     .slice()
-    .sort((a, b) => new Date(b.scheduledTime).getTime() - new Date(a.scheduledTime).getTime());
+    .sort(sortReminders);
 
   return (
     <View className="flex-1 bg-slate-50">
