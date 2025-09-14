@@ -125,3 +125,11 @@ export class NotificationService {
         return Notifications.getAllScheduledNotificationsAsync();
     }
 }
+
+// Test-only helpers to manage internal module state
+// This is not intended for production use.
+export const __testOnly = {
+    resetInit: () => {
+        initialized = false;
+    }
+}
