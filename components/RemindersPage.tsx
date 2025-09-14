@@ -171,6 +171,7 @@ const formatTimeHHMM = (d: Date) => {
     description: '',
     date: '',
     time: '',
+    repeatDaily: false,
   });
   const [scheduledAt, setScheduledAt] = useState<Date>(() => {
     const now = new Date();
@@ -185,7 +186,7 @@ const formatTimeHHMM = (d: Date) => {
 
   // Edit mode state
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editData, setEditData] = useState<ReminderFormData>({ title: '', description: '', date: '', time: '' });
+  const [editData, setEditData] = useState<ReminderFormData>({ title: '', description: '', date: '', time: '', repeatDaily: false });
   const [editScheduledAt, setEditScheduledAt] = useState<Date | null>(null);
   const [showEditDatePicker, setShowEditDatePicker] = useState(false);
   const [showEditTimePicker, setShowEditTimePicker] = useState(false);
@@ -199,24 +200,49 @@ const formatTimeHHMM = (d: Date) => {
     loadReminders();
 
     // Listener: when a notification is received (app foreground) mark matching reminder inactive
-    const receivedSub = Notifications.addNotificationReceivedListener((event) => {
+    const receivedSub = Notifications.addNotificationReceivedListener(async (event) => {
       const idFromData = (event.request.content.data as any)?.reminderId as string | undefined;
+      const isDaily = (event.request.content.data as any)?.isDaily as boolean;
       if (!idFromData) return;
-      setReminders(prev => prev.map(r => r.id === idFromData ? { ...r, isActive: false } : r));
+      
+      setReminders(prev => prev.map(r => {
+        if (r.id !== idFromData) return r;
+        // Keep daily repeats active; one-off becomes inactive
+        if (r.repeat === 'daily') {
+          // Reschedule for tomorrow
+          handleRescheduleDailyReminder(r);
+          return r;
+        }
+        return { ...r, isActive: false };
+      }));
     });
 
     // Listener: when user interacts with the notification (tap) ensure reminder is inactive
-    const responseSub = Notifications.addNotificationResponseReceivedListener((response) => {
+    const responseSub = Notifications.addNotificationResponseReceivedListener(async (response) => {
       const idFromData = (response.notification.request.content.data as any)?.reminderId as string | undefined;
+      const isDaily = (response.notification.request.content.data as any)?.isDaily as boolean;
       if (!idFromData) return;
-      setReminders(prev => prev.map(r => r.id === idFromData ? { ...r, isActive: false } : r));
+      
+      setReminders(prev => prev.map(r => {
+        if (r.id !== idFromData) return r;
+        if (r.repeat === 'daily') {
+          // Reschedule for tomorrow
+          handleRescheduleDailyReminder(r);
+          return r;
+        }
+        return { ...r, isActive: false };
+      }));
     });
 
     // Also reconcile when app comes to foreground (handles ignored notifications)
     const appStateSub = AppState.addEventListener('change', (state) => {
       if (state === 'active') {
         const now = new Date();
-        setReminders(prev => prev.map(r => (r.isActive && new Date(r.scheduledTime) <= now) ? { ...r, isActive: false } : r));
+        setReminders(prev => prev.map(r => {
+          if (!r.isActive) return r;
+          if (r.repeat === 'daily') return r; // keep daily active
+          return new Date(r.scheduledTime) <= now ? { ...r, isActive: false } : r;
+        }));
       }
     });
 
@@ -250,6 +276,23 @@ const formatTimeHHMM = (d: Date) => {
     setReminders(mockReminders);
   };
 
+  const handleRescheduleDailyReminder = async (reminder: Reminder) => {
+    try {
+      if (reminder.repeat === 'daily' && reminder.notificationId) {
+        const newNotificationId = await NotificationService.rescheduleDailyReminder(reminder);
+        if (newNotificationId) {
+          setReminders(prev => prev.map(r => 
+            r.id === reminder.id 
+              ? { ...r, notificationId: newNotificationId }
+              : r
+          ));
+        }
+      }
+    } catch (error) {
+      console.error('Error rescheduling daily reminder:', error);
+    }
+  };
+
   const handleCreateReminder = async () => {
     if (!formData.title.trim()) {
       Alert.alert('Error', 'Please enter a reminder title');
@@ -259,7 +302,7 @@ const formatTimeHHMM = (d: Date) => {
     try {
       const scheduledTime = scheduledAt;
 
-      if (scheduledTime <= new Date()) {
+      if (!formData.repeatDaily && scheduledTime <= new Date()) {
         Alert.alert('Error', 'Please select a future date and time');
         return;
       }
@@ -272,6 +315,7 @@ const formatTimeHHMM = (d: Date) => {
         isActive: true,
         createdAt: new Date(),
         updatedAt: new Date(),
+        repeat: formData.repeatDaily ? 'daily' : 'none',
       };
 
       // Schedule notification
@@ -285,7 +329,7 @@ const formatTimeHHMM = (d: Date) => {
         setReminders(prev => [...prev, newReminder]);
         
         // Clear form
-        setFormData({ title: '', description: '', date: '', time: '' });
+  setFormData({ title: '', description: '', date: '', time: '', repeatDaily: false });
         const now = new Date();
         now.setSeconds(0,0)
         now.setMinutes(now.getMinutes() + 1);
@@ -305,7 +349,7 @@ const formatTimeHHMM = (d: Date) => {
   // Open the create modal and pre-fill with provided title (used by Manual Add flow)
   const handleOpenManualAdd = (titleText: string) => {
     // Pre-fill title and clear description/date/time so user can adjust
-    setFormData({ title: titleText, description: '', date: '', time: '' });
+    setFormData({ title: titleText, description: '', date: '', time: '', repeatDaily: false });
     const now = new Date();
     now.setSeconds(0,0);
     now.setMinutes(now.getMinutes() + 1);
@@ -316,7 +360,7 @@ const formatTimeHHMM = (d: Date) => {
   // Cancel create modal and clear any entered data
   const handleCancelCreate = () => {
     setShowCreateModal(false);
-    setFormData({ title: '', description: '', date: '', time: '' });
+    setFormData({ title: '', description: '', date: '', time: '', repeatDaily: false });
     const now = new Date();
     now.setSeconds(0,0)
     now.setMinutes(now.getMinutes()+1);
@@ -328,7 +372,7 @@ const formatTimeHHMM = (d: Date) => {
   const handleToggleReminder = async (reminder: Reminder, value: boolean) => {
     try {
       if (value) {
-        if (reminder.scheduledTime <= new Date()) {
+        if ((!reminder.repeat || reminder.repeat === 'none') && reminder.scheduledTime <= new Date()) {
           Alert.alert('Past time', 'This reminder is set in the past. Edit it to a future time before activating.');
           return;
         }
@@ -374,7 +418,10 @@ const formatTimeHHMM = (d: Date) => {
     );
   };
 
-  const formatDateTime = (date: Date) => {
+  const formatDateTime = (date: Date, repeat?: Reminder['repeat']) => {
+    if (repeat === 'daily') {
+      return `Daily at ${formatTimeHHMM(date)}`;
+    }
     return `${formatDateDDMMYYYY(date)} ${formatTimeHHMM(date)}`;
   };
 
@@ -432,8 +479,8 @@ const formatTimeHHMM = (d: Date) => {
       // Parse the natural language text using Gemini
       const parsedData: ParsedReminderData = await geminiService.parseReminderText(text);
       
-      // Check if fallback parsing was used
-      if (parsedData.usedFallback ) {
+      // If fallback parsing was used but it detected a repeat value, allow manual confirm
+      if (parsedData.usedFallback && parsedData.repeat !== 'daily') {
         // Use a single popup/modal flow: ask the user to manually add or retry
         Alert.alert(
           'Could not understand your reminder',
@@ -450,10 +497,11 @@ const formatTimeHHMM = (d: Date) => {
       // Prefill the create modal with parsed fields (let user confirm)
       // Only set fields that are present in parsedData
       const prefill: any = {};
-      if (parsedData.title) prefill.title = parsedData.title;
-      if (parsedData.description) prefill.description = parsedData.description;
-      if (parsedData.date) prefill.date = parsedData.date;
-      if (parsedData.time) prefill.time = parsedData.time;
+  if (parsedData.title) prefill.title = parsedData.title;
+  if (parsedData.description) prefill.description = parsedData.description;
+  if (parsedData.date) prefill.date = parsedData.date;
+  if (parsedData.time) prefill.time = parsedData.time;
+  if (parsedData.repeat === 'daily') prefill.repeatDaily = true;
 
       console.log("prefill data: ", prefill)
 
@@ -463,6 +511,15 @@ const formatTimeHHMM = (d: Date) => {
         setScheduledAt(computedDate);
       } catch (e) {
         // fallback: leave scheduledAt unchanged
+      }
+      // If parse provided only a time with no date and repeatDaily is set, compute next occurrence today/tomorrow
+      if (prefill.repeatDaily && parsedData.time && !parsedData.date) {
+        // compute next occurrence at provided time
+        const [h, m] = parsedData.time.split(':').map(Number);
+        const next = new Date();
+        next.setHours(h, m, 0, 0);
+        if (next <= new Date()) next.setDate(next.getDate() + 1);
+        setScheduledAt(next);
       }
 
       setFormData(prev => ({ ...prev, ...prefill }));
@@ -495,6 +552,7 @@ const formatTimeHHMM = (d: Date) => {
       description: reminder.description ?? '',
       date: formatDateDDMMYYYY(when),
       time: formatTimeHHMM(when),
+      repeatDaily: reminder.repeat === 'daily',
     });
   };
 
@@ -530,7 +588,7 @@ const formatTimeHHMM = (d: Date) => {
       Alert.alert('Error', 'Please enter a reminder title');
       return;
     }
-    if (editScheduledAt <= new Date()) {
+    if ((!editData.repeatDaily) && editScheduledAt <= new Date()) {
       Alert.alert('Error', 'Please select a future date and time');
       return;
     }
@@ -547,6 +605,7 @@ const formatTimeHHMM = (d: Date) => {
         description: editData.description,
         scheduledTime: editScheduledAt,
         updatedAt: new Date(),
+        repeat: editData.repeatDaily ? 'daily' : 'none',
       };
 
       let newNotificationId: string | null = null;
@@ -636,21 +695,42 @@ const formatTimeHHMM = (d: Date) => {
               multiline
               numberOfLines={2}
             />
-            <View className="flex-row gap-3 mb-3">
-              <View className="flex-1">
-                <Text className="text-sm font-medium mb-1 text-slate-600">Date</Text>
-                <TouchableOpacity onPress={() => setShowDatePicker(true)} className="border border-slate-300 rounded-lg p-3 bg-white">
-                  <Text className="text-slate-800">{formattedDate}</Text>
-                </TouchableOpacity>
+            <View className="flex-row items-center justify-between mb-3">
+              <Text className="text-sm font-medium text-slate-700">Repeat daily</Text>
+              <Switch
+                value={formData.repeatDaily ?? false}
+                onValueChange={(val) => {
+                  setFormData(prev => ({ ...prev, repeatDaily: val }));
+                }}
+                trackColor={{ false: '#e5e7eb', true: '#34d399' }}
+                thumbColor={formData.repeatDaily ? '#10b981' : '#9ca3af'}
+              />
+            </View>
+            {!formData.repeatDaily && (
+              <View className="flex-row gap-3 mb-3">
+                <View className="flex-1">
+                  <Text className="text-sm font-medium mb-1 text-slate-600">Date</Text>
+                  <TouchableOpacity onPress={() => setShowDatePicker(true)} className="border border-slate-300 rounded-lg p-3 bg-white">
+                    <Text className="text-slate-800">{formattedDate}</Text>
+                  </TouchableOpacity>
+                </View>
+                <View className="flex-1">
+                  <Text className="text-sm font-medium mb-1 text-slate-600">Time</Text>
+                  <TouchableOpacity onPress={() => setShowTimePicker(true)} className="border border-slate-300 rounded-lg p-3 bg-white">
+                    <Text className="text-slate-800">{formattedTime}</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
-              <View className="flex-1">
+            )}
+            {formData.repeatDaily && (
+              <View className="mb-3">
                 <Text className="text-sm font-medium mb-1 text-slate-600">Time</Text>
                 <TouchableOpacity onPress={() => setShowTimePicker(true)} className="border border-slate-300 rounded-lg p-3 bg-white">
                   <Text className="text-slate-800">{formattedTime}</Text>
                 </TouchableOpacity>
               </View>
-            </View>
-            {showDatePicker && (
+            )}
+            {showDatePicker && !formData.repeatDaily && (
               <DateTimePicker
                 value={scheduledAt}
                 mode="date"
@@ -711,9 +791,14 @@ const formatTimeHHMM = (d: Date) => {
                         <View className="flex-row items-center mt-2">
                           <View className={`px-2 py-1 rounded-full bg-emerald-50`}>
                             <Text className={`text-emerald-700 text-xs`}>
-                              {formatDateTime(reminder.scheduledTime)}
+                              {formatDateTime(reminder.scheduledTime, reminder.repeat)}
                             </Text>
                           </View>
+                          {reminder.repeat === 'daily' && (
+                            <View className="ml-2 px-2 py-1 rounded-full bg-amber-100 border border-amber-200">
+                              <Text className="text-amber-700 text-xs">Daily</Text>
+                            </View>
+                          )}
                         </View>
                       </View>
 
@@ -763,12 +848,27 @@ const formatTimeHHMM = (d: Date) => {
                           multiline
                           numberOfLines={2}
                         />
+                        <View className="flex-row items-center justify-between">
+                          <Text className="text-xs font-medium text-slate-700">Repeat daily</Text>
+                          <Switch
+                            value={editData.repeatDaily ?? false}
+                            onValueChange={(val) => setEditData(prev => ({ ...prev, repeatDaily: val }))}
+                            trackColor={{ false: '#e5e7eb', true: '#34d399' }}
+                            thumbColor={editData.repeatDaily ? '#10b981' : '#9ca3af'}
+                          />
+                        </View>
                         <View className="flex-row gap-3">
                           <View className="flex-1">
                             <Text className="text-xs font-medium mb-1 text-slate-600">Date</Text>
-                            <TouchableOpacity onPress={() => setShowEditDatePicker(true)} className="border border-slate-300 rounded-lg p-2 bg-white">
-                              <Text className="text-slate-800">{editScheduledAt ? formatDateDDMMYYYY(editScheduledAt) : ''}</Text>
-                            </TouchableOpacity>
+                            {editData.repeatDaily ? (
+                              <View className="border border-slate-200 rounded-lg p-2 bg-slate-50">
+                                <Text className="text-slate-500">Every day</Text>
+                              </View>
+                            ) : (
+                              <TouchableOpacity onPress={() => setShowEditDatePicker(true)} className="border border-slate-300 rounded-lg p-2 bg-white">
+                                <Text className="text-slate-800">{editScheduledAt ? formatDateDDMMYYYY(editScheduledAt) : ''}</Text>
+                              </TouchableOpacity>
+                            )}
                           </View>
                           <View className="flex-1">
                             <Text className="text-xs font-medium mb-1 text-slate-600">Time</Text>
@@ -777,7 +877,7 @@ const formatTimeHHMM = (d: Date) => {
                             </TouchableOpacity>
                           </View>
                         </View>
-                        {showEditDatePicker && editScheduledAt && (
+                        {showEditDatePicker && editScheduledAt && !editData.repeatDaily && (
                           <DateTimePicker
                             value={editScheduledAt}
                             mode="date"
@@ -825,9 +925,14 @@ const formatTimeHHMM = (d: Date) => {
                         <View className="flex-row items-center mt-2">
                           <View className="px-2 py-1 rounded-full bg-slate-100">
                             <Text className="text-slate-600 text-xs">
-                              {formatDateTime(reminder.scheduledTime)}
+                              {formatDateTime(reminder.scheduledTime, reminder.repeat)}
                             </Text>
                           </View>
+                          {reminder.repeat === 'daily' && (
+                            <View className="ml-2 px-2 py-1 rounded-full bg-amber-100 border border-amber-200">
+                              <Text className="text-amber-700 text-xs">Daily</Text>
+                            </View>
+                          )}
                         </View>
                       </View>
 

@@ -46,7 +46,11 @@ export class NotificationService {
 
         const at = new Date(reminder.scheduledTime);
         at.setSeconds(0, 0);
-        if (at <= new Date()) {
+        const now = new Date();
+
+        // When repeating daily, we only care about hour/minute and we allow scheduling even
+        // if the date is in the past; the first fire will be the next matching time.
+        if (reminder.repeat !== 'daily' && at <= now) {
             throw new Error('Scheduled time must be in the future');
         }
 
@@ -55,21 +59,61 @@ export class NotificationService {
             body: reminder.description || 'Time for your reminder!',
             sound: 'default',
             priority: Notifications.AndroidNotificationPriority.HIGH,
-            data: { reminderId: reminder.id },
+            data: {
+                reminderId: reminder.id,
+                isDaily: reminder.repeat === 'daily'
+            },
         };
 
-        // Use a Date trigger with explicit type compatible with SDK 53 types
-        const trigger: Notifications.DateTriggerInput = {
-            type: Notifications.SchedulableTriggerInputTypes.DATE,
-            date: at,
-            channelId: Platform.OS === 'android' ? 'reminders' : undefined,
-        };
+        let trigger: Notifications.NotificationTriggerInput;
+        if (reminder.repeat === 'daily') {
+            // For daily reminders, calculate the next occurrence
+            const targetTime = new Date();
+            targetTime.setHours(at.getHours(), at.getMinutes(), 0, 0);
+
+            // If the time has already passed today, schedule for tomorrow
+            if (targetTime <= now) {
+                targetTime.setDate(targetTime.getDate() + 1);
+            }
+
+            // Use date trigger for the first occurrence, then rely on rescheduling
+            trigger = {
+                type: Notifications.SchedulableTriggerInputTypes.DATE,
+                date: targetTime,
+                channelId: Platform.OS === 'android' ? 'reminders' : undefined,
+            } as Notifications.DateTriggerInput;
+        } else {
+            // One-off date trigger
+            trigger = {
+                type: Notifications.SchedulableTriggerInputTypes.DATE,
+                date: at,
+                channelId: Platform.OS === 'android' ? 'reminders' : undefined,
+            } as Notifications.DateTriggerInput;
+        }
 
         const id = await Notifications.scheduleNotificationAsync({ content, trigger });
         return id;
     }
 
-    static async cancelNotification(notificationId: string): Promise<void> {
+    static async rescheduleDailyReminder(reminder: Reminder): Promise<string | null> {
+        // Cancel existing notification
+        if (reminder.notificationId) {
+            await this.cancelNotification(reminder.notificationId);
+        }
+
+        // Schedule next occurrence (tomorrow at the same time)
+        const nextOccurrence = new Date();
+        const scheduledTime = new Date(reminder.scheduledTime);
+        nextOccurrence.setHours(scheduledTime.getHours(), scheduledTime.getMinutes(), 0, 0);
+        nextOccurrence.setDate(nextOccurrence.getDate() + 1);
+
+        const updatedReminder = {
+            ...reminder,
+            scheduledTime: nextOccurrence
+        };
+
+        return this.scheduleReminderNotification(updatedReminder);
+    } static async cancelNotification(notificationId: string): Promise<void> {
         await Notifications.cancelScheduledNotificationAsync(notificationId);
     }
 

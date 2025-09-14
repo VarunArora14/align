@@ -58,6 +58,7 @@ Parse this into a JSON object with the following structure:
   "description": "Optional detailed description (null if none)",
   "date": "YYYY-MM-DD format (null if not specified or unclear)",
   "time": "HH:MM format in 24-hour (null if not specified)",
+    "repeat": "'none' or 'daily' (null or 'none' if not specified)",
   "isRelativeTime": boolean (true if time is relative like 'in 30 minutes'),
   "relativeMinutes": number (minutes from now if isRelativeTime is true, null otherwise),
   "usedFallback": boolean (true if user input has no meaning to create reminder for or has bad language)
@@ -70,6 +71,7 @@ Rules:
 4. For times: interpret "morning" as 09:00, "afternoon" as 14:00, "evening" as 18:00
 5. Handle relative times like "in 30 minutes", "in 2 hours"
 6. If date/time is ambiguous or missing, set to null
+7. Detect recurrence: set "repeat" to "daily" for phrases like "every day", "daily", "every morning". Otherwise use "none".
 7. Return ONLY the JSON object, no additional text
 8. Set "usedFallback" to true if user input has bad language/intent against others
 
@@ -77,6 +79,7 @@ Examples:
 - "Call mom tomorrow at 2pm" → {"title": "Call mom", "description": null, "date": "tomorrow's date", "time": "14:00", "isRelativeTime": false, "relativeMinutes": null, "usedFallback": false}
 - "Meeting in 30 minutes" → {"title": "Meeting", "description": null, "date": null, "time": null, "isRelativeTime": true, "relativeMinutes": 30, "usedFallback": false}
 - "Buy groceries milk eggs bread" → {"title": "Buy groceries", "description": "milk, eggs, bread", "date": null, "time": null, "isRelativeTime": false, "relativeMinutes": null, "usedFallback": false}
+ - "Daily quick stretch at 9am" → {"title": "Quick stretch", "description": null, "date": null, "time": "09:00", "repeat": "daily", "isRelativeTime": false, "relativeMinutes": null, "usedFallback": false}
 
 Response (JSON only):`;
     }
@@ -110,6 +113,7 @@ Response (JSON only):`;
                 isRelativeTime: parsed.isRelativeTime || false,
                 relativeMinutes: parsed.relativeMinutes || undefined,
                 usedFallback: false,
+                repeat: parsed.repeat || 'none',
             } as ParsedReminderData;
         } catch (error) {
             console.error('Error parsing Gemini JSON response:', error);
@@ -197,6 +201,13 @@ Response (JSON only):`;
             cleanedInput = cleanedInput.replace(relativeTimeMatch[0], '').trim();
         }
 
+        // Detect simple recurrence phrases for fallback
+        const lower = input.toLowerCase();
+        let fallbackRepeat: 'none' | 'daily' = 'none';
+        if (/(every\s+day|daily|every\s+morning|each\s+day|every\s+weekday)/i.test(lower)) {
+            fallbackRepeat = 'daily';
+        }
+
         // Clean up the title
         const title = cleanedInput
             .replace(/\b(at|on|in|for|to)\b/gi, '')
@@ -211,6 +222,7 @@ Response (JSON only):`;
             isRelativeTime,
             relativeMinutes,
             usedFallback: true,
+            repeat: fallbackRepeat,
         } as ParsedReminderData;
     }
 
