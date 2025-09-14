@@ -14,6 +14,7 @@ Android is the primary target platform for development and testing.
 
 The repository contains screenshots in the `images/` folder. Below each filename is listed as the caption to make it easy to identify and select images for release.
 
+https://github.com/user-attachments/assets/989233b9-aa4e-4d2f-a3d5-feb598929c7c
 
 
 ## Features
@@ -40,6 +41,9 @@ The repository contains screenshots in the `images/` folder. Below each filename
 - TypeScript ~5.8
 - NativeWind + TailwindCSS
 - expo-notifications, expo-sqlite
+
+
+
 - @google/generative-ai SDK
 
 ## Architecture Overview
