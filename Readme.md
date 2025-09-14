@@ -82,6 +82,191 @@ Flow (high level):
 3) Reminder persisted via repository → Notification scheduled via service
 4) Foreground/background interactions reconcile state and avoid duplicate notifications
 
+## Architecture (HLD + LLD)
+
+This section summarizes the system design at two levels: high-level (how pieces fit together) and low-level (key contracts, workflows, and edge cases) so you can discuss it clearly in interviews and reviews.
+
+### High-Level Design (HLD)
+
+- Clients: Expo/React Native app (Android-first), single binary using JS/TS runtime.
+- Local-first: All reminder data lives on-device in SQLite via a repository layer; no server required.
+- AI assist: Optional call to Gemini to parse natural language into a structured reminder intent with a robust, regex-based fallback.
+- Notifications: Local notifications via `expo-notifications` with an Android channel. Daily repeats reschedule themselves deterministically.
+- Styling and type safety: NativeWind + strict TypeScript.
+
+#### System context
+
+```mermaid
+graph TD
+	subgraph Device[User Device]
+		UI[React Native UI]\n(components/*)
+		Services[Services]\n(gemini/notification/repository)
+		SQLite[(SQLite DB)]
+		ExpoNotif[expo-notifications]
+	end
+
+	GeminiCloud[(Gemini API)]
+
+	UI --> Services
+	Services --> SQLite
+	Services --> ExpoNotif
+	Services -->|optional| GeminiCloud
+
+	ExpoNotif --> UI
+```
+
+Principles:
+- Clear separation of concerns: UI never touches SQLite directly; all OS notification APIs are behind `notificationService`.
+- Deterministic scheduling: A single helper translates parsed intent to concrete Dates, avoiding drift and “past date” pitfalls.
+- Resilience: Fallback parsing covers common phrases; foreground reconciliation prevents duplicates.
+
+### Low-Level Design (LLD)
+
+#### Key modules and responsibilities
+
+- `components/RemindersPage.tsx`
+	- Presents chat/manual creation UX, lists active/inactive reminders, supports edit/search.
+	- Owns small UX state (modals, pickers) and orchestrates calls to services.
+- `services/geminiService.ts`
+	- Converts free text → `ParsedReminderData` via Gemini; falls back to regex for common cases.
+	- `createScheduledDate(parsed)` resolves absolute Date from relative or absolute signals.
+- `services/reminderRepository.ts`
+	- CRUD for `Reminder` in SQLite. Converts between JS Date and epoch ms.
+- `services/notificationService.ts`
+	- Permissioning, channel setup, schedule/reschedule/cancel, get scheduled notifications.
+	- Daily repeat: schedule the next occurrence and reschedule after fire.
+
+#### Data model (on-device)
+
+```sql
+CREATE TABLE reminders (
+	id TEXT PRIMARY KEY,
+	title TEXT NOT NULL,
+	description TEXT,
+	scheduledTime INTEGER NOT NULL, -- epoch ms
+	isActive INTEGER NOT NULL,      -- 0/1
+	createdAt INTEGER NOT NULL,
+	updatedAt INTEGER NOT NULL,
+	notificationId TEXT,
+	repeat TEXT DEFAULT 'none'      -- 'none' | 'daily'
+);
+```
+
+Types:
+- `Reminder` with Dates in JS runtime, persisted as epoch ms in DB.
+- `ParsedReminderData` produced by AI/fallback, consumed by `createScheduledDate`.
+
+#### Core workflows (sequence)
+
+1) Chat-based creation (AI → schedule → persist)
+
+```mermaid
+sequenceDiagram
+	participant U as User
+	participant UI as RN UI (RemindersPage)
+	participant G as geminiService
+	participant C as Gemini API
+	participant H as createScheduledDate
+	participant R as reminderRepository
+	participant N as notificationService
+
+	U->>UI: Type natural language
+	UI->>G: parseReminderText(text)
+	G->>C: generateContent(prompt)
+	C-->>G: JSON (title/date/time/repeat|relative)
+	G-->>UI: ParsedReminderData
+	UI->>H: createScheduledDate(parsed)
+	H-->>UI: Date
+	UI->>R: createReminder(reminder)
+	UI->>N: scheduleReminderNotification(reminder)
+	N-->>UI: notificationId
+	UI->>R: updateReminderNotificationId(id, notificationId)
+	UI-->>U: Reminder created (listed as active)
+```
+
+2) Notification fired → reschedule daily → reconcile state
+
+```mermaid
+sequenceDiagram
+	participant OS as OS/Expo Notifications
+	participant UI as RN UI (listeners)
+	participant R as reminderRepository
+	participant N as notificationService
+
+	OS-->>UI: onReceived / onResponse
+	UI->>R: mark reminder inactive
+	alt repeat == daily
+		UI->>N: rescheduleDailyReminder(reminder)
+		N-->>UI: new notificationId
+		UI->>R: updateReminderNotificationId(id, newId)
+	end
+	UI: refresh lists (active/inactive)
+```
+
+3) Foreground reconcile (on app focus)
+
+```mermaid
+sequenceDiagram
+	participant App as AppState(focus)
+	participant R as reminderRepository
+	participant N as notificationService
+	participant UI as RN UI
+
+	App-->>UI: change→active
+	UI->>R: getAllReminders()
+	UI->>N: getScheduledNotifications()
+	UI: compare repo vs scheduled; clean duplicates / stale
+	UI->>R: update reminders if needed
+```
+
+#### Contracts (selected)
+
+Type inputs/outputs and expected errors to make the service boundaries crisp.
+
+- geminiService
+	- `parseReminderText(text: string): Promise<ParsedReminderData>`
+		- Errors: network/JSON parse → handled internally by falling back to regex; sets `usedFallback` flag.
+	- `createScheduledDate(parsed: ParsedReminderData): Date`
+		- If no time provided, defaults to next hour; if time in past, move to next day.
+
+- notificationService
+	- `scheduleReminderNotification(reminder: Reminder): Promise<string | null>`
+		- Returns notification id; null if permissions denied. Throws if non-daily and time is in the past.
+	- `rescheduleDailyReminder(reminder: Reminder): Promise<string | null>`
+	- `cancelNotification(id: string): Promise<void>`; `cancelAllNotifications(): Promise<void>`
+	- `getScheduledNotifications(): Promise<...>`
+
+- reminderRepository
+	- `initDB(): Promise<void>`; `getAllReminders(): Promise<Reminder[]>`
+	- `createReminder(r: Reminder): Promise<void>`; `updateReminder(r: Reminder): Promise<void>`
+	- `deleteReminder(id: string): Promise<void>`
+	- `updateReminderNotificationId(id: string, notificationId: string | null): Promise<void>`
+
+#### Edge cases and policies
+
+- Time zones and “past” handling: absolute times in past roll to next day; relative times add minutes from now.
+- Daily repeats: first trigger is the next occurrence at HH:mm; after fire, we reschedule for tomorrow at same HH:mm.
+- Permissions: if notifications not granted, scheduling returns null; UI should communicate limited functionality (non-blocking).
+- Duplicates: foreground reconcile and idempotent update prevent multiple pending schedules for the same reminder.
+- Robust parsing: if AI fails or produces ambiguous fields, we still surface a meaningful title and allow manual corrections.
+
+#### Performance and reliability
+
+- All DB operations are batched through a single connection; data set is small (local-only) → O(1) latencies in practice.
+- Notification scheduling is O(1) per reminder; rescheduling occurs only on daily reminders after fire.
+- No network dependency for core function (only AI parsing is online optional).
+
+
+#### Extensibility roadmap
+
+- Recurrence: weekly/monthly/weekday-only using rules (RRULE-like) with a generalized scheduler.
+- Cloud sync: small API layer for backup/restore and multi-device, with conflict resolution policies.
+- iOS focus: separate iOS notification channel configuration and testing; critical alerts where appropriate.
+- Observability: lightweight analytics and error reporting (privacy-first).
+- NLP: richer entities (location, participants) and smart templates.
+
+
+
 ## Getting Started
 
 ### 1) Prerequisites
