@@ -34,6 +34,7 @@ const formatTimeHHMM = (d: Date) => {
         isActive: false,
         createdAt: new Date(now.getTime() - 6 * 24 * 60 * 60 * 1000),
         updatedAt: new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000),
+        isRecurring: false,
       },
       {
         id: 'r2',
@@ -43,6 +44,7 @@ const formatTimeHHMM = (d: Date) => {
         isActive: false,
         createdAt: new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000),
         updatedAt: new Date(now.getTime() - 24 * 60 * 60 * 1000),
+        isRecurring: false,
       },
       {
         id: 'r3',
@@ -52,6 +54,7 @@ const formatTimeHHMM = (d: Date) => {
         isActive: false,
         createdAt: new Date(now.getTime() - 3 * 60 * 60 * 1000),
         updatedAt: new Date(now.getTime() - 2 * 60 * 60 * 1000),
+        isRecurring: false,
       },
       {
         id: 'r4',
@@ -61,6 +64,7 @@ const formatTimeHHMM = (d: Date) => {
         isActive: false,
         createdAt: new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000),
         updatedAt: new Date(now.getTime() - 30 * 60 * 1000),
+        isRecurring: false,
       },
       {
         id: 'r5',
@@ -71,6 +75,7 @@ const formatTimeHHMM = (d: Date) => {
         createdAt: new Date(),
         updatedAt: new Date(),
         notificationId: 'n5',
+        isRecurring: false,
       },
       {
         id: 'r6',
@@ -81,6 +86,7 @@ const formatTimeHHMM = (d: Date) => {
         createdAt: new Date(),
         updatedAt: new Date(),
         notificationId: 'n6',
+        isRecurring: false,
       },
       {
         id: 'r7',
@@ -91,6 +97,7 @@ const formatTimeHHMM = (d: Date) => {
         createdAt: new Date(),
         updatedAt: new Date(),
         notificationId: 'n7',
+        isRecurring: false,
       },
       {
         id: 'r8',
@@ -100,6 +107,7 @@ const formatTimeHHMM = (d: Date) => {
         isActive: true,
         createdAt: new Date(),
         updatedAt: new Date(),
+        isRecurring: false,
       },
       {
         id: 'r9',
@@ -109,6 +117,7 @@ const formatTimeHHMM = (d: Date) => {
         isActive: false,
         createdAt: new Date(),
         updatedAt: new Date(),
+        isRecurring: false,
       },
       {
         id: 'r10',
@@ -118,6 +127,7 @@ const formatTimeHHMM = (d: Date) => {
         isActive: true,
         createdAt: new Date(),
         updatedAt: new Date(),
+        isRecurring: false,
       },
       {
         id: 'r11',
@@ -127,6 +137,7 @@ const formatTimeHHMM = (d: Date) => {
         isActive: true,
         createdAt: new Date(),
         updatedAt: new Date(),
+        isRecurring: false,
       },
       {
         id: 'r12',
@@ -136,24 +147,30 @@ const formatTimeHHMM = (d: Date) => {
         isActive: false,
         createdAt: new Date(now.getTime() - 11 * 24 * 60 * 60 * 1000),
         updatedAt: new Date(now.getTime() - 10 * 24 * 60 * 60 * 1000),
+        isRecurring: false,
       },
       {
         id: 'r13',
-        title: 'Call mom',
-        description: 'Weekly check-in',
+        title: 'Take vitamins',
+        description: 'Daily health routine',
         scheduledTime: new Date(now.getTime() + 30 * 60 * 1000), // 30 minutes
         isActive: true,
         createdAt: new Date(),
         updatedAt: new Date(),
+        isRecurring: true,
+        recurringType: 'daily',
       },
       {
         id: 'r14',
-        title: 'Read a chapter',
-        description: 'Book: Clean Code',
+        title: 'Stand up meeting',
+        description: 'Daily team sync',
         scheduledTime: new Date(now.getTime() + 6 * 60 * 60 * 1000), // 6 hours
-        isActive: false,
+        isActive: true,
         createdAt: new Date(),
         updatedAt: new Date(),
+        isRecurring: true,
+        recurringType: 'daily',
+        recurringDays: [1, 2, 3, 4, 5], // Weekdays only
       },
       {
         id: 'r15',
@@ -163,6 +180,7 @@ const formatTimeHHMM = (d: Date) => {
         isActive: true,
         createdAt: new Date(),
         updatedAt: new Date(),
+        isRecurring: false,
       },
     ];
   const [reminders, setReminders] = useState<Reminder[]>([]);
@@ -171,6 +189,7 @@ const formatTimeHHMM = (d: Date) => {
     description: '',
     date: '',
     time: '',
+    isRecurring: false,
   });
   const [scheduledAt, setScheduledAt] = useState<Date>(() => {
     const now = new Date();
@@ -185,7 +204,7 @@ const formatTimeHHMM = (d: Date) => {
 
   // Edit mode state
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editData, setEditData] = useState<ReminderFormData>({ title: '', description: '', date: '', time: '' });
+  const [editData, setEditData] = useState<ReminderFormData>({ title: '', description: '', date: '', time: '', isRecurring: false });
   const [editScheduledAt, setEditScheduledAt] = useState<Date | null>(null);
   const [showEditDatePicker, setShowEditDatePicker] = useState(false);
   const [showEditTimePicker, setShowEditTimePicker] = useState(false);
@@ -272,10 +291,14 @@ const formatTimeHHMM = (d: Date) => {
         isActive: true,
         createdAt: new Date(),
         updatedAt: new Date(),
+        isRecurring: formData.isRecurring,
+        recurringType: formData.recurringType,
+        recurringDays: formData.recurringDays,
       };
 
-      // Schedule notification
-      const notificationId = await NotificationService.scheduleReminderNotification(newReminder);
+      // Schedule notification (one-time or weekly based on fields)
+      const scheduledId = await NotificationService.scheduleReminderNotification(newReminder);
+      const notificationId: string | undefined = scheduledId || undefined;
       
       if (notificationId) {
         // console.log("notification ID:" + notificationId)
@@ -285,7 +308,7 @@ const formatTimeHHMM = (d: Date) => {
         setReminders(prev => [...prev, newReminder]);
         
         // Clear form
-        setFormData({ title: '', description: '', date: '', time: '' });
+        setFormData({ title: '', description: '', date: '', time: '', isRecurring: false });
         const now = new Date();
         now.setSeconds(0,0)
         now.setMinutes(now.getMinutes() + 1);
@@ -305,7 +328,7 @@ const formatTimeHHMM = (d: Date) => {
   // Open the create modal and pre-fill with provided title (used by Manual Add flow)
   const handleOpenManualAdd = (titleText: string) => {
     // Pre-fill title and clear description/date/time so user can adjust
-    setFormData({ title: titleText, description: '', date: '', time: '' });
+    setFormData({ title: titleText, description: '', date: '', time: '', isRecurring: false });
     const now = new Date();
     now.setSeconds(0,0);
     now.setMinutes(now.getMinutes() + 1);
@@ -316,7 +339,7 @@ const formatTimeHHMM = (d: Date) => {
   // Cancel create modal and clear any entered data
   const handleCancelCreate = () => {
     setShowCreateModal(false);
-    setFormData({ title: '', description: '', date: '', time: '' });
+    setFormData({ title: '', description: '', date: '', time: '', isRecurring: false });
     const now = new Date();
     now.setSeconds(0,0)
     now.setMinutes(now.getMinutes()+1);
@@ -454,6 +477,13 @@ const formatTimeHHMM = (d: Date) => {
       if (parsedData.description) prefill.description = parsedData.description;
       if (parsedData.date) prefill.date = parsedData.date;
       if (parsedData.time) prefill.time = parsedData.time;
+      
+      // Add recurring fields
+      if (parsedData.isRecurring !== undefined) {
+        prefill.isRecurring = parsedData.isRecurring;
+        if (parsedData.recurringType) prefill.recurringType = parsedData.recurringType;
+        if (parsedData.recurringDays) prefill.recurringDays = parsedData.recurringDays;
+      }
 
       console.log("prefill data: ", prefill)
 
@@ -495,6 +525,9 @@ const formatTimeHHMM = (d: Date) => {
       description: reminder.description ?? '',
       date: formatDateDDMMYYYY(when),
       time: formatTimeHHMM(when),
+      isRecurring: reminder.isRecurring || false,
+      recurringType: reminder.recurringType,
+      recurringDays: reminder.recurringDays,
     });
   };
 
@@ -536,9 +569,12 @@ const formatTimeHHMM = (d: Date) => {
     }
 
     try {
-      // Cancel old schedule if any
+      // Cancel old notifications
       if (reminder.notificationId) {
         await NotificationService.cancelNotification(reminder.notificationId);
+      }
+      if (reminder.isRecurring) {
+        await NotificationService.cancelRecurringNotifications(reminder.id);
       }
 
       const updatedReminder: Reminder = {
@@ -547,18 +583,41 @@ const formatTimeHHMM = (d: Date) => {
         description: editData.description,
         scheduledTime: editScheduledAt,
         updatedAt: new Date(),
+        isRecurring: editData.isRecurring,
+        recurringType: editData.recurringType,
+        recurringDays: editData.recurringDays,
       };
 
-      let newNotificationId: string | null = null;
+      // Schedule new notifications
+      let newNotificationId: string | undefined;
+      
       if (updatedReminder.isActive) {
-        newNotificationId = await NotificationService.scheduleReminderNotification(updatedReminder);
-        if (!newNotificationId) {
-          Alert.alert('Error', 'Please enable notifications to update reminders!');
-          return;
+        if (updatedReminder.isRecurring && updatedReminder.recurringDays && updatedReminder.recurringDays.length > 0) {
+          // Schedule recurring notifications
+          const notificationId = await NotificationService.scheduleRecurringReminder(updatedReminder);
+          newNotificationId = notificationId || undefined;
+          if (!newNotificationId) {
+            Alert.alert('Error', 'Please enable notifications to update reminders!');
+            return;
+          }
+        } else {
+          // Schedule single notification
+          const singleNotificationId = await NotificationService.scheduleReminderNotification(updatedReminder);
+          newNotificationId = singleNotificationId || undefined;
+          if (!newNotificationId) {
+            Alert.alert('Error', 'Please enable notifications to update reminders!');
+            return;
+          }
         }
       }
 
-      setReminders(prev => prev.map(r => r.id === reminder.id ? { ...updatedReminder, notificationId: newNotificationId ?? r.notificationId } : r));
+      // Update the reminder with new notification ID
+      const finalUpdatedReminder = {
+        ...updatedReminder,
+        notificationId: newNotificationId
+      };
+
+      setReminders(prev => prev.map(r => r.id === reminder.id ? finalUpdatedReminder : r));
       cancelEdit();
       Alert.alert('Saved', 'Reminder updated successfully');
     } catch (e) {
@@ -650,6 +709,63 @@ const formatTimeHHMM = (d: Date) => {
                 </TouchableOpacity>
               </View>
             </View>
+            
+            {/* Recurring Options */}
+            <View className="mb-3">
+              <View className="flex-row items-center justify-between mb-2">
+                <Text className="text-sm font-medium text-slate-600">Recurring Daily</Text>
+                <Switch
+                  value={formData.isRecurring}
+                  onValueChange={(value) => setFormData(prev => ({ 
+                    ...prev, 
+                    isRecurring: value,
+                    recurringType: value ? 'daily' : undefined,
+                    recurringDays: value ? [1, 2, 3, 4, 5, 6, 7] : undefined
+                  }))}
+                  trackColor={{ false: '#e2e8f0', true: '#10b981' }}
+                  thumbColor={formData.isRecurring ? '#ffffff' : '#64748b'}
+                />
+              </View>
+              
+              {formData.isRecurring && (
+                <View className="border border-slate-200 rounded-lg p-3 bg-slate-50">
+                  <Text className="text-sm font-medium mb-2 text-slate-600">Repeat on:</Text>
+                  <View className="flex-row flex-wrap gap-2">
+                    {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, index) => {
+                      const dayNumber = index + 1; // 1=Sun .. 7=Sat
+                      const isSelected = formData.recurringDays?.includes(dayNumber);
+                      return (
+                        <TouchableOpacity
+                          key={day}
+                          onPress={() => {
+                            const currentDays = formData.recurringDays || [];
+                            const newDays = isSelected 
+                              ? currentDays.filter(d => d !== dayNumber)
+                              : [...currentDays, dayNumber].sort();
+                            setFormData(prev => ({ ...prev, recurringDays: newDays }));
+                          }}
+                          className={`px-3 py-2 rounded-lg border ${
+                            isSelected 
+                              ? 'bg-emerald-600 border-emerald-600' 
+                              : 'bg-white border-slate-300'
+                          }`}
+                        >
+                          <Text className={`text-sm font-medium ${
+                            isSelected ? 'text-white' : 'text-slate-600'
+                          }`}>
+                            {day}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                  <Text className="text-xs text-slate-500 mt-2">
+                    Reminds at the selected time on chosen weekdays
+                  </Text>
+                </View>
+              )}
+            </View>
+            
             {showDatePicker && (
               <DateTimePicker
                 value={scheduledAt}
@@ -708,12 +824,22 @@ const formatTimeHHMM = (d: Date) => {
                         {reminder.description ? (
                           <Text className="text-slate-600 mt-1">{reminder.description}</Text>
                         ) : null}
-                        <View className="flex-row items-center mt-2">
+                        <View className="flex-row items-center mt-2 gap-2">
                           <View className={`px-2 py-1 rounded-full bg-emerald-50`}>
                             <Text className={`text-emerald-700 text-xs`}>
                               {formatDateTime(reminder.scheduledTime)}
                             </Text>
                           </View>
+                          {reminder.isRecurring && (
+                            <View className="px-2 py-1 rounded-full bg-blue-50">
+                              <Text className="text-blue-700 text-xs">
+                                🔄 {reminder.recurringDays?.length === 7 ? 'Daily' :
+                                     (reminder.recurringDays?.length === 5 &&
+                                      ['2','3','4','5','6'].every(x => reminder.recurringDays?.includes(Number(x)))) ? 'Weekdays' :
+                                     `${reminder.recurringDays?.length} days/week`}
+                              </Text>
+                            </View>
+                          )}
                         </View>
                       </View>
 
@@ -794,6 +920,59 @@ const formatTimeHHMM = (d: Date) => {
                             is24Hour={false}
                           />
                         )}
+                        
+                        {/* Recurring Options for Edit */}
+                        <View className="mt-3">
+                          <View className="flex-row items-center justify-between mb-2">
+                            <Text className="text-xs font-medium text-slate-600">Recurring Daily</Text>
+                            <Switch
+                              value={editData.isRecurring}
+                              onValueChange={(value) => setEditData(prev => ({ 
+                                ...prev, 
+                                isRecurring: value,
+                                recurringType: value ? 'daily' : undefined,
+                                recurringDays: value ? [1, 2, 3, 4, 5, 6, 7] : undefined
+                              }))}
+                              trackColor={{ false: '#e2e8f0', true: '#10b981' }}
+                              thumbColor={editData.isRecurring ? '#ffffff' : '#64748b'}
+                            />
+                          </View>
+                          
+                          {editData.isRecurring && (
+                            <View className="border border-slate-200 rounded-lg p-3 bg-slate-50">
+                              <Text className="text-xs font-medium mb-2 text-slate-600">Repeat on:</Text>
+                              <View className="flex-row flex-wrap gap-2">
+                                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, index) => {
+                                  const dayNumber = index + 1; // 1=Sun .. 7=Sat
+                                  const isSelected = editData.recurringDays?.includes(dayNumber);
+                                  return (
+                                    <TouchableOpacity
+                                      key={day}
+                                      onPress={() => {
+                                        const currentDays = editData.recurringDays || [];
+                                        const newDays = isSelected 
+                                          ? currentDays.filter(d => d !== dayNumber)
+                                          : [...currentDays, dayNumber].sort();
+                                        setEditData(prev => ({ ...prev, recurringDays: newDays }));
+                                      }}
+                                      className={`px-2 py-1 rounded border ${
+                                        isSelected 
+                                          ? 'bg-emerald-600 border-emerald-600' 
+                                          : 'bg-white border-slate-300'
+                                      }`}
+                                    >
+                                      <Text className={`text-xs font-medium ${
+                                        isSelected ? 'text-white' : 'text-slate-600'
+                                      }`}>
+                                        {day}
+                                      </Text>
+                                    </TouchableOpacity>
+                                  );
+                                })}
+                              </View>
+                            </View>
+                          )}
+                        </View>
                       </View>
                     ) : (
                       <TouchableOpacity onPress={() => startEdit(reminder)} className="mt-3 self-start bg-sky-600 rounded-lg px-3 py-1">
@@ -822,12 +1001,22 @@ const formatTimeHHMM = (d: Date) => {
                         {reminder.description ? (
                           <Text className="text-slate-600 mt-1">{reminder.description}</Text>
                         ) : null}
-                        <View className="flex-row items-center mt-2">
+                        <View className="flex-row items-center mt-2 gap-2">
                           <View className="px-2 py-1 rounded-full bg-slate-100">
                             <Text className="text-slate-600 text-xs">
                               {formatDateTime(reminder.scheduledTime)}
                             </Text>
                           </View>
+                          {reminder.isRecurring && (
+                            <View className="px-2 py-1 rounded-full bg-blue-50">
+                              <Text className="text-blue-700 text-xs">
+                                🔄 {reminder.recurringDays?.length === 7 ? 'Daily' :
+                                     (reminder.recurringDays?.length === 5 &&
+                                      ['2','3','4','5','6'].every(x => reminder.recurringDays?.includes(Number(x)))) ? 'Weekdays' :
+                                     `${reminder.recurringDays?.length} days/week`}
+                              </Text>
+                            </View>
+                          )}
                         </View>
                       </View>
 
@@ -909,6 +1098,59 @@ const formatTimeHHMM = (d: Date) => {
                             is24Hour={false}
                           />
                         )}
+                        
+                        {/* Recurring Options for Edit (Inactive) */}
+                        <View className="mt-3">
+                          <View className="flex-row items-center justify-between mb-2">
+                            <Text className="text-xs font-medium text-slate-600">Recurring Daily</Text>
+                            <Switch
+                              value={editData.isRecurring}
+                              onValueChange={(value) => setEditData(prev => ({ 
+                                ...prev, 
+                                isRecurring: value,
+                                recurringType: value ? 'daily' : undefined,
+                                recurringDays: value ? [1, 2, 3, 4, 5, 6, 7] : undefined
+                              }))}
+                              trackColor={{ false: '#e2e8f0', true: '#10b981' }}
+                              thumbColor={editData.isRecurring ? '#ffffff' : '#64748b'}
+                            />
+                          </View>
+                          
+                          {editData.isRecurring && (
+                            <View className="border border-slate-200 rounded-lg p-3 bg-slate-50">
+                              <Text className="text-xs font-medium mb-2 text-slate-600">Repeat on:</Text>
+                              <View className="flex-row flex-wrap gap-2">
+                                {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day, index) => {
+                                  const dayNumber = index + 1;
+                                  const isSelected = editData.recurringDays?.includes(dayNumber);
+                                  return (
+                                    <TouchableOpacity
+                                      key={day}
+                                      onPress={() => {
+                                        const currentDays = editData.recurringDays || [];
+                                        const newDays = isSelected 
+                                          ? currentDays.filter(d => d !== dayNumber)
+                                          : [...currentDays, dayNumber].sort();
+                                        setEditData(prev => ({ ...prev, recurringDays: newDays }));
+                                      }}
+                                      className={`px-2 py-1 rounded border ${
+                                        isSelected 
+                                          ? 'bg-emerald-600 border-emerald-600' 
+                                          : 'bg-white border-slate-300'
+                                      }`}
+                                    >
+                                      <Text className={`text-xs font-medium ${
+                                        isSelected ? 'text-white' : 'text-slate-600'
+                                      }`}>
+                                        {day}
+                                      </Text>
+                                    </TouchableOpacity>
+                                  );
+                                })}
+                              </View>
+                            </View>
+                          )}
+                        </View>
                       </View>
                     ) : (
                       <TouchableOpacity onPress={() => startEdit(reminder)} className="mt-3 self-start bg-sky-600 rounded-lg px-3 py-1">

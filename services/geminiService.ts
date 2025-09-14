@@ -60,7 +60,12 @@ Parse this into a JSON object with the following structure:
   "time": "HH:MM format in 24-hour (null if not specified)",
   "isRelativeTime": boolean (true if time is relative like 'in 30 minutes'),
   "relativeMinutes": number (minutes from now if isRelativeTime is true, null otherwise),
-  "usedFallback": boolean (true if user input has no meaning to create reminder for or has bad language)
+  "usedFallback": boolean (true if user input has no meaning to create reminder for or has bad language),
+  
+  // New recurring fields
+  "isRecurring": boolean (true for "daily", "every day", "weekdays"),
+  "recurringType": "daily" | null,
+    "recurringDays": [1,2,3,4,5,6,7] | null (1=Sunday, for "weekdays only" use [2,3,4,5,6])
 }
 
 Rules:
@@ -74,9 +79,12 @@ Rules:
 8. Set "usedFallback" to true if user input has bad language/intent against others
 
 Examples:
-- "Call mom tomorrow at 2pm" → {"title": "Call mom", "description": null, "date": "tomorrow's date", "time": "14:00", "isRelativeTime": false, "relativeMinutes": null, "usedFallback": false}
-- "Meeting in 30 minutes" → {"title": "Meeting", "description": null, "date": null, "time": null, "isRelativeTime": true, "relativeMinutes": 30, "usedFallback": false}
-- "Buy groceries milk eggs bread" → {"title": "Buy groceries", "description": "milk, eggs, bread", "date": null, "time": null, "isRelativeTime": false, "relativeMinutes": null, "usedFallback": false}
+- "Call mom tomorrow at 2pm" → {"title": "Call mom", "description": null, "date": "tomorrow's date", "time": "14:00", "isRelativeTime": false, "relativeMinutes": null, "usedFallback": false, "isRecurring": false, "recurringType": null, "recurringDays": null}
+- "Meeting in 30 minutes" → {"title": "Meeting", "description": null, "date": null, "time": null, "isRelativeTime": true, "relativeMinutes": 30, "usedFallback": false, "isRecurring": false, "recurringType": null, "recurringDays": null}
+- "Buy groceries milk eggs bread" → {"title": "Buy groceries", "description": "milk, eggs, bread", "date": null, "time": null, "isRelativeTime": false, "relativeMinutes": null, "usedFallback": false, "isRecurring": false, "recurringType": null, "recurringDays": null}
+- "Call mom daily at 2pm" → {"title": "Call mom", "description": null, "date": null, "time": "14:00", "isRelativeTime": false, "relativeMinutes": null, "usedFallback": false, "isRecurring": true, "recurringType": "daily", "recurringDays": null}
+- "Stand up meeting weekdays at 9am" → {"title": "Stand up meeting", "description": null, "date": null, "time": "09:00", "isRelativeTime": false, "relativeMinutes": null, "usedFallback": false, "isRecurring": true, "recurringType": "daily", "recurringDays": [2,3,4,5,6]}
+- "Take medicine every day at 8am" → {"title": "Take medicine", "description": null, "date": null, "time": "08:00", "isRelativeTime": false, "relativeMinutes": null, "usedFallback": false, "isRecurring": true, "recurringType": "daily", "recurringDays": null}
 
 Response (JSON only):`;
     }
@@ -110,6 +118,9 @@ Response (JSON only):`;
                 isRelativeTime: parsed.isRelativeTime || false,
                 relativeMinutes: parsed.relativeMinutes || undefined,
                 usedFallback: false,
+                isRecurring: parsed.isRecurring || false,
+                recurringType: parsed.recurringType || undefined,
+                recurringDays: parsed.recurringDays || undefined,
             } as ParsedReminderData;
         } catch (error) {
             console.error('Error parsing Gemini JSON response:', error);
@@ -197,6 +208,31 @@ Response (JSON only):`;
             cleanedInput = cleanedInput.replace(relativeTimeMatch[0], '').trim();
         }
 
+        // Check for recurring patterns
+        const recurringPatterns = [
+            /\b(daily|every\s+day)\b/i,
+            /\b(weekdays|weekday)\b/i,
+        ];
+
+        let isRecurring = false;
+        let recurringType: 'daily' | undefined;
+        let recurringDays: number[] | undefined;
+
+        for (const pattern of recurringPatterns) {
+            const match = input.match(pattern);
+            if (match) {
+                isRecurring = true;
+                recurringType = 'daily';
+
+                if (match[0].toLowerCase().includes('weekday')) {
+                    recurringDays = [2, 3, 4, 5, 6]; // Monday(2) to Friday(6)
+                }
+
+                cleanedInput = cleanedInput.replace(match[0], '').trim();
+                break;
+            }
+        }
+
         // Clean up the title
         const title = cleanedInput
             .replace(/\b(at|on|in|for|to)\b/gi, '')
@@ -211,6 +247,9 @@ Response (JSON only):`;
             isRelativeTime,
             relativeMinutes,
             usedFallback: true,
+            isRecurring,
+            recurringType,
+            recurringDays,
         } as ParsedReminderData;
     }
 
