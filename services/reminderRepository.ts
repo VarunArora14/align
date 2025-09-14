@@ -15,6 +15,9 @@ async function getDB(): Promise<SQLite.SQLiteDatabase> {
 }
 
 export async function initDB() {
+
+    // shows mock data if uncomment below
+    // throw Error("mock data error!")
     const database = await getDB();
     await database.execAsync(`CREATE TABLE IF NOT EXISTS ${TABLE} (
         id TEXT PRIMARY KEY,
