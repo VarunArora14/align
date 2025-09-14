@@ -218,13 +218,18 @@ const formatTimeHHMM = (d: Date) => {
       
       setReminders(prev => prev.map(r => {
         if (r.id !== idFromData) return r;
-        // Keep daily repeats active; one-off becomes inactive
-        if (r.repeat === 'daily') {
-          // Reschedule for tomorrow
-          handleRescheduleDailyReminder(r);
-          return r;
+        // ALWAYS mark non-daily reminders as inactive when notification fires
+        if (r.repeat !== 'daily') {
+          const updated = { ...r, isActive: false, updatedAt: new Date() };
+          // Persist inactive state to DB
+          ReminderRepo.updateReminder(updated).catch(err => 
+            console.error('Failed to persist inactive state:', err)
+          );
+          return updated;
         }
-        return { ...r, isActive: false };
+        // Daily repeats stay active and reschedule for tomorrow
+        handleRescheduleDailyReminder(r);
+        return r;
       }));
     });
 
@@ -236,12 +241,18 @@ const formatTimeHHMM = (d: Date) => {
       
       setReminders(prev => prev.map(r => {
         if (r.id !== idFromData) return r;
-        if (r.repeat === 'daily') {
-          // Reschedule for tomorrow
-          handleRescheduleDailyReminder(r);
-          return r;
+        // ALWAYS mark non-daily reminders as inactive when user taps notification
+        if (r.repeat !== 'daily') {
+          const updated = { ...r, isActive: false, updatedAt: new Date() };
+          // Persist inactive state to DB
+          ReminderRepo.updateReminder(updated).catch(err => 
+            console.error('Failed to persist inactive state:', err)
+          );
+          return updated;
         }
-        return { ...r, isActive: false };
+        // Daily repeats stay active and reschedule for tomorrow
+        handleRescheduleDailyReminder(r);
+        return r;
       }));
     });
 
@@ -252,7 +263,15 @@ const formatTimeHHMM = (d: Date) => {
         setReminders(prev => prev.map(r => {
           if (!r.isActive) return r;
           if (r.repeat === 'daily') return r; // keep daily active
-          return new Date(r.scheduledTime) <= now ? { ...r, isActive: false } : r;
+          if (new Date(r.scheduledTime) <= now) {
+            const updated = { ...r, isActive: false, updatedAt: new Date() };
+            // Persist inactive state to DB for past reminders
+            ReminderRepo.updateReminder(updated).catch(err => 
+              console.error('Failed to persist inactive state for past reminder:', err)
+            );
+            return updated;
+          }
+          return r;
         }));
       }
     });
@@ -623,6 +642,12 @@ const formatTimeHHMM = (d: Date) => {
         updatedAt: new Date(),
         repeat: editData.repeatDaily ? 'daily' : 'none',
       };
+
+      // Auto-deactivate non-daily reminders if they're edited to a past time
+      if (!editData.repeatDaily && editScheduledAt <= new Date() && updatedReminder.isActive) {
+        updatedReminder.isActive = false;
+        updatedReminder.notificationId = undefined;
+      }
 
       let newNotificationId: string | null = null;
       if (updatedReminder.isActive) {

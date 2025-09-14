@@ -1,3 +1,2 @@
-- Integrate Gemini API for strucutred outputs logging
-- Create workflow for gemini to uderstad intet and then create the reminder based off info. Cosider flow details as if partial details present then allow user to enter them/review them and then set reminder
-- Populate the "Create new reminder" and allow to create
+- Make sure notifications come at exact time as per mobile clock
+- DB handling for setting inactive notifications or notifications passed their time
