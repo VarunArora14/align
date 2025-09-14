@@ -98,21 +98,26 @@ This section summarizes the system design at two levels: high-level (how pieces 
 
 ```mermaid
 graph TD
-	subgraph Device[User Device]
-		UI[React Native UI]\n(components/*)
-		Services[Services]\n(gemini/notification/repository)
-		SQLite[(SQLite DB)]
-		ExpoNotif[expo-notifications]
-	end
+    %% Subgraph for the client device
+    subgraph Device["📱 User Device"]
+        UI["React Native UI (components/*)"]
+        Services["App Services (gemini / notification / repository)"]
+        SQLite[("SQLite DB")]
+        ExpoNotif["Expo Notifications"]
+    end
 
-	GeminiCloud[(Gemini API)]
+    %% External service
+    GeminiCloud[("☁️ Gemini API")]
 
-	UI --> Services
-	Services --> SQLite
-	Services --> ExpoNotif
-	Services -->|optional| GeminiCloud
+    %% Connections inside device
+    UI --> Services
+    Services --> SQLite
+    Services --> ExpoNotif
+    Services -->|optional| GeminiCloud
 
-	ExpoNotif --> UI
+    %% Feedback loop
+    ExpoNotif --> UI
+
 ```
 
 Principles:
@@ -188,35 +193,37 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
-	participant OS as OS/Expo Notifications
-	participant UI as RN UI (listeners)
-	participant R as reminderRepository
-	participant N as notificationService
+    participant OS as OS & Expo Notifications
+    participant UI as React Native UI [listeners]
+    participant R as Reminder Repository
+    participant N as Notification Service
 
-	OS-->>UI: onReceived / onResponse
-	UI->>R: mark reminder inactive
-	alt repeat == daily
-		UI->>N: rescheduleDailyReminder(reminder)
-		N-->>UI: new notificationId
-		UI->>R: updateReminderNotificationId(id, newId)
-	end
-	UI: refresh lists (active/inactive)
+    OS-->>UI: onReceived / onResponse
+    UI->>R: mark reminder inactive
+
+    alt Reminder type = daily
+        UI->>N: rescheduleDailyReminder(reminder)
+        N-->>UI: return new notificationId
+        UI->>R: updateReminderNotificationId(id, newId)
+    end
 ```
 
 3) Foreground reconcile (on app focus)
 
 ```mermaid
 sequenceDiagram
-	participant App as AppState(focus)
-	participant R as reminderRepository
-	participant N as notificationService
-	participant UI as RN UI
+    participant App as App State [focus]
+    participant R as Reminder Repository
+    participant N as Notification Service
+    participant UI as React Native UI
 
-	App-->>UI: change→active
-	UI->>R: getAllReminders()
-	UI->>N: getScheduledNotifications()
-	UI: compare repo vs scheduled; clean duplicates / stale
-	UI->>R: update reminders if needed
+    App-->>UI: state change → active
+    UI->>R: getAllReminders()
+    UI->>N: getScheduledNotifications()
+
+    Note right of UI: Compare repo vs scheduled<br/>Clean duplicates / stale
+    UI->>R: update reminders if needed
+
 ```
 
 #### Contracts (selected)
