@@ -14,29 +14,6 @@ Android is the primary target platform for development and testing.
 
 The repository contains screenshots in the `images/` folder. Below each filename is listed as the caption to make it easy to identify and select images for release.
 
-- `images/home.png`
-
-![images/home.png](images/home.png)
-
-- `images/chat_based_reminder.png`
-
-![images/chat_based_reminder.png](images/chat_based_reminder.png)
-
-- `images/chat_based_reminder_populated.png`
-
-![images/chat_based_reminder_populated.png](images/chat_based_reminder_populated.png)
-
-- `images/edit_reminders.png`
-
-![images/edit_reminders.png](images/edit_reminders.png)
-
-- `images/home_inactive_reminders.png`
-
-![images/home_inactive_reminders.png](images/home_inactive_reminders.png)
-
-- `images/search_reminders.png`
-
-![images/search_reminders.png](images/search_reminders.png)
 
 
 ## Features
